@@ -2,7 +2,7 @@
 // Copyright Contributors to the Open Cluster Management project
 // Licensed under the Apache License 2.0
 
-package analytics
+package rsnamespace
 
 import (
 	"context"
@@ -45,7 +45,7 @@ func TestCreateOrUpdatePrometheusRulePolicy_CreatesNewPolicy(t *testing.T) {
 	created := &policyv1.Policy{}
 	err = client.Get(context.TODO(), types.NamespacedName{
 		Name:      rsPrometheusRulePolicyName,
-		Namespace: rsNamespace,
+		Namespace: GetNamespace(),
 	}, created)
 	assert.NoError(t, err)
 

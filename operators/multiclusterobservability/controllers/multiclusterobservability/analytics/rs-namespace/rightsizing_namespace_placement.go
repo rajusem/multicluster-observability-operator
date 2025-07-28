@@ -2,7 +2,7 @@
 // Copyright Contributors to the Open Cluster Management project
 // Licensed under the Apache License 2.0
 
-package analytics
+package rsnamespace
 
 import (
 	"context"
@@ -21,11 +21,11 @@ func createUpdatePlacement(ctx context.Context, c client.Client, placementConfig
 	placement := &clusterv1beta1.Placement{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      rsPlacementName,
-			Namespace: rsNamespace,
+			Namespace: GetNamespace(),
 		},
 	}
 	key := types.NamespacedName{
-		Namespace: rsNamespace,
+		Namespace: GetNamespace(),
 		Name:      rsPlacementName,
 	}
 

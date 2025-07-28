@@ -2,7 +2,7 @@
 // Copyright Contributors to the Open Cluster Management project
 // Licensed under the Apache License 2.0
 
-package analytics
+package rsnamespace
 
 import (
 	"context"
@@ -37,7 +37,7 @@ func TestCreateUpdatePlacement_CreatesNew(t *testing.T) {
 	created := &clusterv1beta1.Placement{}
 	err = client.Get(context.TODO(), types.NamespacedName{
 		Name:      rsPlacementName,
-		Namespace: rsNamespace,
+		Namespace: GetNamespace(),
 	}, created)
 	assert.NoError(t, err)
 	assert.Equal(t, placementSpec.Tolerations[0].Key, created.Spec.Tolerations[0].Key)
@@ -50,7 +50,7 @@ func TestCreateUpdatePlacement_UpdatesExisting(t *testing.T) {
 	existing := &clusterv1beta1.Placement{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      rsPlacementName,
-			Namespace: rsNamespace,
+			Namespace: GetNamespace(),
 		},
 		Spec: clusterv1beta1.PlacementSpec{},
 	}
@@ -72,7 +72,7 @@ func TestCreateUpdatePlacement_UpdatesExisting(t *testing.T) {
 	updated := &clusterv1beta1.Placement{}
 	err = client.Get(context.TODO(), types.NamespacedName{
 		Name:      rsPlacementName,
-		Namespace: rsNamespace,
+		Namespace: GetNamespace(),
 	}, updated)
 	assert.NoError(t, err)
 	assert.Equal(t, "maintenance", updated.Spec.Tolerations[0].Key)

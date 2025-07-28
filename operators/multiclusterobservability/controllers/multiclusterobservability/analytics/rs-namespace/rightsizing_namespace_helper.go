@@ -2,7 +2,7 @@
 // Copyright Contributors to the Open Cluster Management project
 // Licensed under the Apache License 2.0
 
-package analytics
+package rsnamespace
 
 import (
 	"context"
@@ -24,7 +24,7 @@ func isPlatformFeatureConfigured(mco *mcov1beta2.MultiClusterObservability) bool
 }
 
 // Get rightsizing namespace configuration
-func getRightSizingNamespaceConfig(mco *mcov1beta2.MultiClusterObservability) (bool, string) {
+func GetRightSizingNamespaceConfig(mco *mcov1beta2.MultiClusterObservability) (bool, string) {
 
 	isRightSizingEnabled := false
 	namespaceBinding := ""
@@ -35,8 +35,8 @@ func getRightSizingNamespaceConfig(mco *mcov1beta2.MultiClusterObservability) (b
 	return isRightSizingEnabled, namespaceBinding
 }
 
-// cleanupRSNamespaceResources cleans up the resources created for namespace right-sizing
-func cleanupRSNamespaceResources(ctx context.Context, c client.Client, namespace string, bindingUpdated bool) {
+// CleanupRSNamespaceResources cleans up the resources created for namespace right-sizing
+func CleanupRSNamespaceResources(ctx context.Context, c client.Client, namespace string, bindingUpdated bool) {
 	log.V(1).Info("rs - cleaning up namespace resources if exist")
 
 	var resourcesToDelete []client.Object

@@ -2,7 +2,7 @@
 // Copyright Contributors to the Open Cluster Management project
 // Licensed under the Apache License 2.0
 
-package analytics
+package rsnamespace
 
 import (
 	"context"
@@ -20,7 +20,7 @@ func createPlacementBinding(ctx context.Context, c client.Client) error {
 	placementBinding := &policyv1.PlacementBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      rsPlacementBindingName,
-			Namespace: rsNamespace,
+			Namespace: GetNamespace(),
 		},
 	}
 

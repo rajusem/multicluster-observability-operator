@@ -2,7 +2,7 @@
 // Copyright Contributors to the Open Cluster Management project
 // Licensed under the Apache License 2.0
 
-package analytics
+package rsnamespace
 
 import (
 	"context"
@@ -121,7 +121,7 @@ func GetNamespaceRSConfigMapPredicateFunc(ctx context.Context, c client.Client) 
 		}
 
 		// Apply changes based on the config map
-		if err := applyRSNamespaceConfigMapChanges(ctx, c, configData); err != nil {
+		if err := ApplyRSNamespaceConfigMapChanges(ctx, c, configData); err != nil {
 			log.Error(err, "rs - failed to apply configmap changes")
 			return false
 		}
@@ -157,7 +157,7 @@ func GetNamespaceRSConfigMapPredicateFunc(ctx context.Context, c client.Client) 
 	}
 }
 
-func applyRSNamespaceConfigMapChanges(ctx context.Context, c client.Client, configData RSNamespaceConfigMapData) error {
+func ApplyRSNamespaceConfigMapChanges(ctx context.Context, c client.Client, configData RSNamespaceConfigMapData) error {
 
 	prometheusRule, err := generatePrometheusRule(configData)
 	if err != nil {

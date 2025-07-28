@@ -2,13 +2,13 @@
 // Copyright Contributors to the Open Cluster Management project
 // Licensed under the Apache License 2.0
 
-package analytics_test
+package rsnamespace_test
 
 import (
 	"context"
 	"testing"
 
-	analyticsctrl "github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/controllers/multiclusterobservability/analytics"
+	rsnamespace "github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/controllers/multiclusterobservability/analytics/rs-namespace"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,7 +35,7 @@ func TestEnsureRSNamespaceConfigMapExists_CreatesIfNotExists(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	// Call the real function
-	err := analyticsctrl.EnsureRSNamespaceConfigMapExists(context.TODO(), client)
+	err := rsnamespace.EnsureRSNamespaceConfigMapExists(context.TODO(), client)
 	assert.NoError(t, err)
 
 	// Manually query in the correct namespace (hardcoded because config.GetDefaultNamespace() is not mockable)
@@ -64,7 +64,7 @@ func TestGetRightSizingConfigData_Success(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	// Get default config data from the real code
-	data := analyticsctrl.GetDefaultRSNamespaceConfig()
+	data := rsnamespace.GetDefaultRSNamespaceConfig()
 
 	// Create configmap manually in mocked namespace
 	cm := &corev1.ConfigMap{
@@ -86,7 +86,7 @@ func TestGetRightSizingConfigData_Success(t *testing.T) {
 	}, fetchedCM)
 	assert.NoError(t, err)
 
-	configData, err := analyticsctrl.GetRightSizingConfigData(fetchedCM)
+	configData, err := rsnamespace.GetRightSizingConfigData(fetchedCM)
 	assert.NoError(t, err)
 
 	assert.NotEmpty(t, configData.PrometheusRuleConfig.NamespaceFilterCriteria.ExclusionCriteria)
@@ -106,6 +106,6 @@ func TestGetRightSizingConfigData_InvalidYAML(t *testing.T) {
 		},
 	}
 
-	_, err := analyticsctrl.GetRightSizingConfigData(cm)
+	_, err := rsnamespace.GetRightSizingConfigData(cm)
 	assert.Error(t, err)
 }

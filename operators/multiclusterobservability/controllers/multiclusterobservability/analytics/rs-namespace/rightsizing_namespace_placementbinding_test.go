@@ -2,7 +2,7 @@
 // Copyright Contributors to the Open Cluster Management project
 // Licensed under the Apache License 2.0
 
-package analytics
+package rsnamespace
 
 import (
 	"context"
@@ -31,7 +31,7 @@ func TestCreatePlacementBinding_CreatesWhenNotFound(t *testing.T) {
 	pb := &policyv1.PlacementBinding{}
 	err = client.Get(ctx, types.NamespacedName{
 		Name:      rsPlacementBindingName,
-		Namespace: rsNamespace,
+		Namespace: GetNamespace(),
 	}, pb)
 	assert.NoError(t, err)
 	assert.Equal(t, rsPlacementName, pb.PlacementRef.Name)
@@ -48,7 +48,7 @@ func TestCreatePlacementBinding_SkipsIfAlreadyExists(t *testing.T) {
 	existing := &policyv1.PlacementBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      rsPlacementBindingName,
-			Namespace: rsNamespace,
+			Namespace: GetNamespace(),
 		},
 		PlacementRef: policyv1.PlacementSubject{
 			Name:     rsPlacementName,
@@ -73,7 +73,7 @@ func TestCreatePlacementBinding_SkipsIfAlreadyExists(t *testing.T) {
 	pb := &policyv1.PlacementBinding{}
 	err = client.Get(ctx, types.NamespacedName{
 		Name:      rsPlacementBindingName,
-		Namespace: rsNamespace,
+		Namespace: GetNamespace(),
 	}, pb)
 	assert.NoError(t, err)
 	assert.Equal(t, rsPlacementName, pb.PlacementRef.Name)

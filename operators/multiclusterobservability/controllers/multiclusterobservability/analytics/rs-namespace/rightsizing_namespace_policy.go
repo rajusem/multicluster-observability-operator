@@ -2,7 +2,7 @@
 // Copyright Contributors to the Open Cluster Management project
 // Licensed under the Apache License 2.0
 
-package analytics
+package rsnamespace
 
 import (
 	"context"
@@ -28,7 +28,7 @@ func createOrUpdatePrometheusRulePolicy(
 	policy := &policyv1.Policy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      rsPrometheusRulePolicyName,
-			Namespace: rsNamespace,
+			Namespace: GetNamespace(),
 		},
 	}
 
