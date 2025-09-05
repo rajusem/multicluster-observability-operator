@@ -20,6 +20,12 @@ var (
 	log = logf.Log.WithName("analytics")
 )
 
+var (
+	// Global manager instances - created once and reused
+	namespaceManager      *rsnamespace.NamespaceManager
+	virtualizationManager *rsvirtualization.VirtualizationManager
+)
+
 func CreateRightSizingComponent(
 	ctx context.Context,
 	c client.Client,
@@ -27,13 +33,21 @@ func CreateRightSizingComponent(
 ) error {
 	log.V(1).Info("rs - inside create rs component")
 
-	// Handle namespace right-sizing
-	if err := rsnamespace.HandleRightSizing(ctx, c, mco); err != nil {
+	// Initialize managers if not already created
+	if namespaceManager == nil {
+		namespaceManager = rsnamespace.NewNamespaceManager(c)
+	}
+	if virtualizationManager == nil {
+		virtualizationManager = rsvirtualization.NewVirtualizationManager(c)
+	}
+
+	// Handle namespace right-sizing using the singleton manager
+	if err := namespaceManager.HandleRightSizing(ctx, mco); err != nil {
 		return fmt.Errorf("failed to handle namespace right-sizing: %w", err)
 	}
 
-	// Handle virtualization right-sizing
-	if err := rsvirtualization.HandleRightSizing(ctx, c, mco); err != nil {
+	// Handle virtualization right-sizing using the singleton manager
+	if err := virtualizationManager.HandleRightSizing(ctx, mco); err != nil {
 		return fmt.Errorf("failed to handle virtualization right-sizing: %w", err)
 	}
 
@@ -43,10 +57,18 @@ func CreateRightSizingComponent(
 
 // GetNamespaceRSConfigMapPredicateFunc returns predicate for namespace right-sizing ConfigMap
 func GetNamespaceRSConfigMapPredicateFunc(ctx context.Context, c client.Client) predicate.Funcs {
-	return rsnamespace.GetNamespaceRSConfigMapPredicateFunc(ctx, c)
+	// Initialize manager if not already created
+	if namespaceManager == nil {
+		namespaceManager = rsnamespace.NewNamespaceManager(c)
+	}
+	return rsnamespace.GetNamespaceRSConfigMapPredicateFunc(ctx, namespaceManager)
 }
 
 // GetVirtualizationRSConfigMapPredicateFunc returns predicate for virtualization right-sizing ConfigMap
 func GetVirtualizationRSConfigMapPredicateFunc(ctx context.Context, c client.Client) predicate.Funcs {
-	return rsvirtualization.GetVirtualizationRSConfigMapPredicateFunc(ctx, c)
+	// Initialize manager if not already created
+	if virtualizationManager == nil {
+		virtualizationManager = rsvirtualization.NewVirtualizationManager(c)
+	}
+	return rsvirtualization.GetVirtualizationRSConfigMapPredicateFunc(ctx, virtualizationManager)
 }

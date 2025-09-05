@@ -34,17 +34,18 @@ func TestCreateUpdatePlacement_UsesCorrectConstants(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	err := CreateUpdatePlacement(context.TODO(), client, clusterv1beta1.Placement{Spec: placementSpec})
+	nm := NewNamespaceManager(client)
+	err := nm.CreateUpdatePlacement(context.TODO(), clusterv1beta1.Placement{Spec: placementSpec})
 	require.NoError(t, err)
 
 	// Verify placement was created with the correct name and namespace from constants
 	placement := &clusterv1beta1.Placement{}
 	err = client.Get(context.TODO(), types.NamespacedName{
 		Name:      PlacementName,
-		Namespace: ComponentState.Namespace,
+		Namespace: nm.State.Namespace,
 	}, placement)
 
 	require.NoError(t, err)
 	assert.Equal(t, PlacementName, placement.Name, "Should use PlacementName constant")
-	assert.Equal(t, ComponentState.Namespace, placement.Namespace, "Should use Namespace constant")
+	assert.Equal(t, nm.State.Namespace, placement.Namespace, "Should use Namespace constant")
 }

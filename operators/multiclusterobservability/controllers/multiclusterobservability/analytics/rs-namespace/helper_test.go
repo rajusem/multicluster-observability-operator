@@ -50,15 +50,7 @@ func newTestMCO(binding string, enabled bool) *mcov1beta2.MultiClusterObservabil
 	}
 }
 
-// Reset global state
-func resetGlobalState() {
-	ComponentState.Namespace = rsutility.DefaultNamespace
-	ComponentState.Enabled = false
-}
-
 func TestHandleRightSizing_FeatureDisabled(t *testing.T) {
-	defer resetGlobalState()
-
 	scheme := setupTestScheme(t)
 	mco := newTestMCO("", false) // Feature disabled
 
@@ -70,17 +62,16 @@ func TestHandleRightSizing_FeatureDisabled(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	err := HandleRightSizing(ctx, client, mco)
+	nm := NewNamespaceManager(client)
+	err := nm.HandleRightSizing(ctx, mco)
 	require.NoError(t, err)
 
 	// Verify state changes
-	assert.Equal(t, rsutility.DefaultNamespace, ComponentState.Namespace)
-	assert.False(t, ComponentState.Enabled)
+	assert.Equal(t, rsutility.DefaultNamespace, nm.State.Namespace)
+	assert.False(t, nm.State.Enabled)
 }
 
 func TestHandleRightSizing_FeatureEnabledNoNamespaceChange(t *testing.T) {
-	defer resetGlobalState()
-
 	scheme := setupTestScheme(t)
 	mco := newTestMCO(rsutility.DefaultNamespace, true) // Feature enabled, same namespace
 
@@ -92,12 +83,13 @@ func TestHandleRightSizing_FeatureEnabledNoNamespaceChange(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	err := HandleRightSizing(ctx, client, mco)
+	nm := NewNamespaceManager(client)
+	err := nm.HandleRightSizing(ctx, mco)
 	require.NoError(t, err)
 
 	// Verify state changes
-	assert.Equal(t, rsutility.DefaultNamespace, ComponentState.Namespace)
-	assert.True(t, ComponentState.Enabled)
+	assert.Equal(t, rsutility.DefaultNamespace, nm.State.Namespace)
+	assert.True(t, nm.State.Enabled)
 
 	// Verify ConfigMap was created
 	cm := &corev1.ConfigMap{}
@@ -111,7 +103,6 @@ func TestHandleRightSizing_FeatureEnabledNoNamespaceChange(t *testing.T) {
 }
 
 func TestHandleRightSizing_FeatureEnabledWithNamespaceChange(t *testing.T) {
-	defer resetGlobalState()
 
 	scheme := setupTestScheme(t)
 	newNamespace := "new-custom-namespace"
@@ -145,17 +136,20 @@ spec:
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	err := HandleRightSizing(ctx, client, mco)
+	nm := NewNamespaceManager(client)
+	// Simulate that the component was previously enabled in a different namespace
+	nm.State.Enabled = true
+	nm.State.Namespace = rsutility.DefaultNamespace
+
+	err := nm.HandleRightSizing(ctx, mco)
 	require.NoError(t, err)
 
 	// Verify namespace was updated
-	assert.Equal(t, newNamespace, ComponentState.Namespace)
-	assert.True(t, ComponentState.Enabled)
+	assert.Equal(t, newNamespace, nm.State.Namespace)
+	assert.True(t, nm.State.Enabled)
 }
 
 func TestHandleRightSizing_ConfigMapCreationFailure(t *testing.T) {
-	defer resetGlobalState()
-
 	scheme := runtime.NewScheme() // Minimal scheme without ConfigMap support
 	require.NoError(t, mcov1beta2.AddToScheme(scheme))
 
@@ -169,7 +163,8 @@ func TestHandleRightSizing_ConfigMapCreationFailure(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	err := HandleRightSizing(ctx, client, mco)
+	nm := NewNamespaceManager(client)
+	err := nm.HandleRightSizing(ctx, mco)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "rs - failed to fetch configmap")
 }
@@ -244,10 +239,11 @@ func TestCleanupRSNamespaceResources_UsesCorrectComponentConfig(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Test that the function executes without error (basic smoke test)
+	// Test that the method executes without error (basic smoke test)
 	// The actual cleanup logic is tested comprehensively in rs-utility/component_test.go
-	CleanupRSNamespaceResources(ctx, client, rsutility.DefaultNamespace, false)
-	CleanupRSNamespaceResources(ctx, client, rsutility.DefaultNamespace, true)
+	nm := NewNamespaceManager(client)
+	nm.CleanupRSNamespaceResources(ctx, rsutility.DefaultNamespace, false)
+	nm.CleanupRSNamespaceResources(ctx, rsutility.DefaultNamespace, true)
 
-	// Test passes if no panic or error occurs, confirming the wrapper works correctly
+	// Test passes if no panic or error occurs, confirming the method works correctly
 }

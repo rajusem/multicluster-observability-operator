@@ -28,19 +28,20 @@ func TestCreatePlacementBinding_UsesCorrectConstants(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 	ctx := context.Background()
 
-	err := CreatePlacementBinding(ctx, client)
+	nm := NewNamespaceManager(client)
+	err := nm.CreatePlacementBinding(ctx)
 	require.NoError(t, err)
 
 	// Verify the PlacementBinding was created with the correct constants
 	pb := &policyv1.PlacementBinding{}
 	err = client.Get(ctx, types.NamespacedName{
 		Name:      PlacementBindingName,
-		Namespace: ComponentState.Namespace,
+		Namespace: nm.State.Namespace,
 	}, pb)
 
 	require.NoError(t, err)
 	assert.Equal(t, PlacementBindingName, pb.Name, "Should use PlacementBindingName constant")
-	assert.Equal(t, ComponentState.Namespace, pb.Namespace, "Should use Namespace variable")
+	assert.Equal(t, nm.State.Namespace, pb.Namespace, "Should use Namespace variable")
 	assert.Equal(t, PlacementName, pb.PlacementRef.Name, "Should use PlacementName constant")
 	assert.Equal(t, PrometheusRulePolicyName, pb.Subjects[0].Name, "Should use PrometheusRulePolicyName constant")
 }

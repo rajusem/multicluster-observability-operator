@@ -9,14 +9,12 @@ import (
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	rsutility "github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/controllers/multiclusterobservability/analytics/rs-utility"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // CreateOrUpdateVirtualizationPrometheusRulePolicy creates or updates the PrometheusRule policy for virtualization
-func CreateOrUpdateVirtualizationPrometheusRulePolicy(
+func (vm *VirtualizationManager) CreateOrUpdateVirtualizationPrometheusRulePolicy(
 	ctx context.Context,
-	c client.Client,
 	prometheusRule monitoringv1.PrometheusRule,
 ) error {
-	return rsutility.CreateOrUpdateRSPrometheusRulePolicy(ctx, c, PrometheusRulePolicyName, ComponentState.Namespace, prometheusRule)
+	return rsutility.CreateOrUpdateRSPrometheusRulePolicy(ctx, vm.Client, PrometheusRulePolicyName, vm.State.Namespace, prometheusRule)
 }

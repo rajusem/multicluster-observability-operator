@@ -22,11 +22,30 @@ const (
 	ConfigMapName            = "rs-virt-config"
 )
 
+// VirtualizationManager encapsulates the component state and client
+type VirtualizationManager struct {
+	Client client.Client
+	State  *rsutility.ComponentState
+}
+
+// NewVirtualizationManager creates a new VirtualizationManager instance
+func NewVirtualizationManager(c client.Client) *VirtualizationManager {
+	return &VirtualizationManager{
+		Client: c,
+		State: &rsutility.ComponentState{
+			Namespace: rsutility.DefaultNamespace,
+			Enabled:   false,
+		},
+	}
+}
+
 var (
 	log = logf.Log.WithName("rs-virtualization")
+)
 
-	// Component configuration
-	componentConfig = rsutility.ComponentConfig{
+// buildComponentConfig creates the component configuration for this VirtualizationManager
+func (vm *VirtualizationManager) buildComponentConfig(includeApplyChangesFunc bool) rsutility.ComponentConfig {
+	config := rsutility.ComponentConfig{
 		ComponentType:            rsutility.ComponentTypeVirtualization,
 		ConfigMapName:            ConfigMapName,
 		PlacementName:            PlacementName,
@@ -34,22 +53,27 @@ var (
 		PrometheusRulePolicyName: PrometheusRulePolicyName,
 		DefaultNamespace:         rsutility.DefaultNamespace,
 		GetDefaultConfigFunc:     GetDefaultRSVirtualizationConfig,
-		ApplyChangesFunc:         ApplyRSVirtualizationConfigMapChanges,
 	}
 
-	// Component state
-	ComponentState = &rsutility.ComponentState{
-		Namespace: rsutility.DefaultNamespace,
-		Enabled:   false,
+	if includeApplyChangesFunc {
+		config.ApplyChangesFunc = func(ctx context.Context, c client.Client, configData rsutility.RSNamespaceConfigMapData) error {
+			// Use this manager instance to apply changes
+			return vm.ApplyRSVirtualizationConfigMapChanges(ctx, configData)
+		}
 	}
-)
+
+	return config
+}
 
 // HandleRightSizing handles the virtualization right-sizing functionality
-func HandleRightSizing(ctx context.Context, c client.Client, mco *mcov1beta2.MultiClusterObservability) error {
+func (vm *VirtualizationManager) HandleRightSizing(ctx context.Context, mco *mcov1beta2.MultiClusterObservability) error {
 	log.V(1).Info("rs - handling virtualization right-sizing")
 
+	// Use the common config builder with ApplyChangesFunc
+	config := vm.buildComponentConfig(true)
+
 	// Use generic component handler
-	err := rsutility.HandleComponentRightSizing(ctx, c, mco, componentConfig, ComponentState)
+	err := rsutility.HandleComponentRightSizing(ctx, vm.Client, mco, config, vm.State)
 	return err
 }
 
@@ -64,7 +88,11 @@ func GetRightSizingVirtualizationConfig(mco *mcov1beta2.MultiClusterObservabilit
 }
 
 // CleanupRSVirtualizationResources cleans up the resources created for virtualization right-sizing
-func CleanupRSVirtualizationResources(ctx context.Context, c client.Client, namespace string, bindingUpdated bool) {
+func (vm *VirtualizationManager) CleanupRSVirtualizationResources(ctx context.Context, namespace string, bindingUpdated bool) {
 	log.V(1).Info("rs - cleaning up virtualization resources if exist")
-	rsutility.CleanupComponentResources(ctx, c, componentConfig, namespace, bindingUpdated)
+
+	// Use the common config builder without ApplyChangesFunc for cleanup
+	config := vm.buildComponentConfig(false)
+
+	rsutility.CleanupComponentResources(ctx, vm.Client, config, namespace, bindingUpdated)
 }

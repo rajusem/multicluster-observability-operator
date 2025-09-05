@@ -22,11 +22,30 @@ const (
 	ConfigMapName            = "rs-namespace-config"
 )
 
+// NamespaceManager encapsulates the component state and client
+type NamespaceManager struct {
+	Client client.Client
+	State  *rsutility.ComponentState
+}
+
+// NewNamespaceManager creates a new NamespaceManager instance
+func NewNamespaceManager(c client.Client) *NamespaceManager {
+	return &NamespaceManager{
+		Client: c,
+		State: &rsutility.ComponentState{
+			Namespace: rsutility.DefaultNamespace,
+			Enabled:   false,
+		},
+	}
+}
+
 var (
 	log = logf.Log.WithName("rs-namespace")
+)
 
-	// Component configuration
-	componentConfig = rsutility.ComponentConfig{
+// buildComponentConfig creates the component configuration for this NamespaceManager
+func (nm *NamespaceManager) buildComponentConfig(includeApplyChangesFunc bool) rsutility.ComponentConfig {
+	config := rsutility.ComponentConfig{
 		ComponentType:            rsutility.ComponentTypeNamespace,
 		ConfigMapName:            ConfigMapName,
 		PlacementName:            PlacementName,
@@ -34,22 +53,27 @@ var (
 		PrometheusRulePolicyName: PrometheusRulePolicyName,
 		DefaultNamespace:         rsutility.DefaultNamespace,
 		GetDefaultConfigFunc:     GetDefaultRSNamespaceConfig,
-		ApplyChangesFunc:         ApplyRSNamespaceConfigMapChanges,
 	}
 
-	// Component state
-	ComponentState = &rsutility.ComponentState{
-		Namespace: rsutility.DefaultNamespace,
-		Enabled:   false,
+	if includeApplyChangesFunc {
+		config.ApplyChangesFunc = func(ctx context.Context, c client.Client, configData rsutility.RSNamespaceConfigMapData) error {
+			// Use this manager instance to apply changes
+			return nm.ApplyRSNamespaceConfigMapChanges(ctx, configData)
+		}
 	}
-)
+
+	return config
+}
 
 // HandleRightSizing handles the namespace right-sizing functionality
-func HandleRightSizing(ctx context.Context, c client.Client, mco *mcov1beta2.MultiClusterObservability) error {
+func (nm *NamespaceManager) HandleRightSizing(ctx context.Context, mco *mcov1beta2.MultiClusterObservability) error {
 	log.V(1).Info("rs - handling namespace right-sizing")
 
+	// Use the common config builder with ApplyChangesFunc
+	config := nm.buildComponentConfig(true)
+
 	// Use generic component handler
-	err := rsutility.HandleComponentRightSizing(ctx, c, mco, componentConfig, ComponentState)
+	err := rsutility.HandleComponentRightSizing(ctx, nm.Client, mco, config, nm.State)
 	return err
 }
 
@@ -64,7 +88,11 @@ func GetRightSizingNamespaceConfig(mco *mcov1beta2.MultiClusterObservability) (b
 }
 
 // CleanupRSNamespaceResources cleans up the resources created for namespace right-sizing
-func CleanupRSNamespaceResources(ctx context.Context, c client.Client, namespace string, bindingUpdated bool) {
+func (nm *NamespaceManager) CleanupRSNamespaceResources(ctx context.Context, namespace string, bindingUpdated bool) {
 	log.V(1).Info("rs - cleaning up namespace resources if exist")
-	rsutility.CleanupComponentResources(ctx, c, componentConfig, namespace, bindingUpdated)
+
+	// Use the common config builder without ApplyChangesFunc for cleanup
+	config := nm.buildComponentConfig(false)
+
+	rsutility.CleanupComponentResources(ctx, nm.Client, config, namespace, bindingUpdated)
 }

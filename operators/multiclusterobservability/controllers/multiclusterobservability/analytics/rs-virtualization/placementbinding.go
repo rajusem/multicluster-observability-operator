@@ -8,10 +8,9 @@ import (
 	"context"
 
 	rsutility "github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/controllers/multiclusterobservability/analytics/rs-utility"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // CreateVirtualizationPlacementBinding creates the PlacementBinding resource for virtualization
-func CreateVirtualizationPlacementBinding(ctx context.Context, c client.Client) error {
-	return rsutility.CreateRSPlacementBinding(ctx, c, PlacementBindingName, ComponentState.Namespace, PlacementName, PrometheusRulePolicyName)
+func (vm *VirtualizationManager) CreateVirtualizationPlacementBinding(ctx context.Context) error {
+	return rsutility.CreateRSPlacementBinding(ctx, vm.Client, PlacementBindingName, vm.State.Namespace, PlacementName, PrometheusRulePolicyName)
 }

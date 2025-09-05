@@ -50,13 +50,7 @@ func newTestMCO(binding string, enabled bool) *mcov1beta2.MultiClusterObservabil
 	}
 }
 
-func resetGlobalState() {
-	ComponentState.Namespace = rsutility.DefaultNamespace
-	ComponentState.Enabled = false
-}
-
 func TestHandleRightSizing_FeatureDisabled(t *testing.T) {
-	defer resetGlobalState()
 
 	scheme := setupTestScheme(t)
 	mco := newTestMCO("", false) // Feature disabled
@@ -69,17 +63,16 @@ func TestHandleRightSizing_FeatureDisabled(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	err := HandleRightSizing(ctx, client, mco)
+	vm := NewVirtualizationManager(client)
+	err := vm.HandleRightSizing(ctx, mco)
 	require.NoError(t, err)
 
 	// Verify state changes
-	assert.Equal(t, rsutility.DefaultNamespace, ComponentState.Namespace)
-	assert.False(t, ComponentState.Enabled)
+	assert.Equal(t, rsutility.DefaultNamespace, vm.State.Namespace)
+	assert.False(t, vm.State.Enabled)
 }
 
 func TestHandleRightSizing_FeatureEnabledNoNamespaceChange(t *testing.T) {
-	defer resetGlobalState()
-
 	scheme := setupTestScheme(t)
 	mco := newTestMCO(rsutility.DefaultNamespace, true) // Feature enabled, same namespace
 
@@ -91,12 +84,13 @@ func TestHandleRightSizing_FeatureEnabledNoNamespaceChange(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	err := HandleRightSizing(ctx, client, mco)
+	vm := NewVirtualizationManager(client)
+	err := vm.HandleRightSizing(ctx, mco)
 	require.NoError(t, err)
 
 	// Verify state changes
-	assert.Equal(t, rsutility.DefaultNamespace, ComponentState.Namespace)
-	assert.True(t, ComponentState.Enabled)
+	assert.Equal(t, rsutility.DefaultNamespace, vm.State.Namespace)
+	assert.True(t, vm.State.Enabled)
 
 	// Verify ConfigMap was created
 	cm := &corev1.ConfigMap{}
@@ -110,7 +104,6 @@ func TestHandleRightSizing_FeatureEnabledNoNamespaceChange(t *testing.T) {
 }
 
 func TestHandleRightSizing_FeatureEnabledWithNamespaceChange(t *testing.T) {
-	defer resetGlobalState()
 
 	scheme := setupTestScheme(t)
 	newNamespace := "new-custom-namespace"
@@ -144,12 +137,17 @@ spec:
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	err := HandleRightSizing(ctx, client, mco)
+	vm := NewVirtualizationManager(client)
+	// Simulate that the component was previously enabled in a different namespace
+	vm.State.Enabled = true
+	vm.State.Namespace = rsutility.DefaultNamespace
+
+	err := vm.HandleRightSizing(ctx, mco)
 	require.NoError(t, err)
 
 	// Verify namespace was updated
-	assert.Equal(t, newNamespace, ComponentState.Namespace)
-	assert.True(t, ComponentState.Enabled)
+	assert.Equal(t, newNamespace, vm.State.Namespace)
+	assert.True(t, vm.State.Enabled)
 }
 
 func TestGetRightSizingVirtualizationConfig_PlatformNotConfigured(t *testing.T) {
@@ -222,10 +220,11 @@ func TestCleanupRSVirtualizationResources_UsesCorrectComponentConfig(t *testing.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Test that the function executes without error (basic smoke test)
+	// Test that the method executes without error (basic smoke test)
 	// The actual cleanup logic is tested comprehensively in rs-utility/component_test.go
-	CleanupRSVirtualizationResources(ctx, client, rsutility.DefaultNamespace, false)
-	CleanupRSVirtualizationResources(ctx, client, rsutility.DefaultNamespace, true)
+	vm := NewVirtualizationManager(client)
+	vm.CleanupRSVirtualizationResources(ctx, rsutility.DefaultNamespace, false)
+	vm.CleanupRSVirtualizationResources(ctx, rsutility.DefaultNamespace, true)
 
-	// Test passes if no panic or error occurs, confirming the wrapper works correctly
+	// Test passes if no panic or error occurs, confirming the method works correctly
 }

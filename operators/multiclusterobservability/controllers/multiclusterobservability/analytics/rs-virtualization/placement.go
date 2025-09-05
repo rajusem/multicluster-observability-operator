@@ -9,10 +9,9 @@ import (
 
 	rsutility "github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/controllers/multiclusterobservability/analytics/rs-utility"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // CreateUpdateVirtualizationPlacement creates the Placement resource for virtualization
-func CreateUpdateVirtualizationPlacement(ctx context.Context, c client.Client, placementConfig clusterv1beta1.Placement) error {
-	return rsutility.CreateUpdateRSPlacement(ctx, c, PlacementName, ComponentState.Namespace, placementConfig)
+func (vm *VirtualizationManager) CreateUpdateVirtualizationPlacement(ctx context.Context, placementConfig clusterv1beta1.Placement) error {
+	return rsutility.CreateUpdateRSPlacement(ctx, vm.Client, PlacementName, vm.State.Namespace, placementConfig)
 }

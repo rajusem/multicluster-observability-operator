@@ -33,17 +33,18 @@ func TestCreateUpdateVirtualizationPlacement_UsesCorrectConstants(t *testing.T) 
 		WithScheme(scheme).
 		Build()
 
-	err := CreateUpdateVirtualizationPlacement(context.TODO(), client, clusterv1beta1.Placement{Spec: placementSpec})
+	vm := NewVirtualizationManager(client)
+	err := vm.CreateUpdateVirtualizationPlacement(context.TODO(), clusterv1beta1.Placement{Spec: placementSpec})
 	require.NoError(t, err)
 
 	// Verify placement was created with the correct name and namespace from constants
 	placement := &clusterv1beta1.Placement{}
 	err = client.Get(context.TODO(), types.NamespacedName{
 		Name:      PlacementName,
-		Namespace: ComponentState.Namespace,
+		Namespace: vm.State.Namespace,
 	}, placement)
 
 	require.NoError(t, err)
 	assert.Equal(t, PlacementName, placement.Name, "Should use PlacementName constant")
-	assert.Equal(t, ComponentState.Namespace, placement.Namespace, "Should use Namespace constant")
+	assert.Equal(t, vm.State.Namespace, placement.Namespace, "Should use Namespace constant")
 }

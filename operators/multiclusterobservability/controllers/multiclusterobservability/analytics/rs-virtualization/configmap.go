@@ -34,28 +34,31 @@ func GetRightSizingVirtualizationConfigData(cm *corev1.ConfigMap) (rsutility.RSN
 	return rsutility.GetRSConfigData(cm)
 }
 
-func GetVirtualizationRSConfigMapPredicateFunc(ctx context.Context, c client.Client) predicate.Funcs {
-	return rsutility.GetRSConfigMapPredicateFunc(ctx, c, ConfigMapName, ApplyRSVirtualizationConfigMapChanges)
+func GetVirtualizationRSConfigMapPredicateFunc(ctx context.Context, vm *VirtualizationManager) predicate.Funcs {
+	return rsutility.GetRSConfigMapPredicateFunc(ctx, vm.Client, ConfigMapName, func(ctx context.Context, client client.Client, configData rsutility.RSNamespaceConfigMapData) error {
+		// Use the provided manager instance - no new instance creation!
+		return vm.ApplyRSVirtualizationConfigMapChanges(ctx, configData)
+	})
 }
 
-func ApplyRSVirtualizationConfigMapChanges(ctx context.Context, c client.Client, configData rsutility.RSNamespaceConfigMapData) error {
-
+// ApplyRSVirtualizationConfigMapChanges applies configuration changes using VirtualizationManager
+func (vm *VirtualizationManager) ApplyRSVirtualizationConfigMapChanges(ctx context.Context, configData rsutility.RSNamespaceConfigMapData) error {
 	prometheusRule, err := GeneratePrometheusRule(configData)
 	if err != nil {
 		return err
 	}
 
-	err = CreateOrUpdateVirtualizationPrometheusRulePolicy(ctx, c, prometheusRule)
+	err = vm.CreateOrUpdateVirtualizationPrometheusRulePolicy(ctx, prometheusRule)
 	if err != nil {
 		return err
 	}
 
-	err = CreateUpdateVirtualizationPlacement(ctx, c, configData.PlacementConfiguration)
+	err = vm.CreateUpdateVirtualizationPlacement(ctx, configData.PlacementConfiguration)
 	if err != nil {
 		return err
 	}
 
-	err = CreateVirtualizationPlacementBinding(ctx, c)
+	err = vm.CreateVirtualizationPlacementBinding(ctx)
 	if err != nil {
 		return err
 	}

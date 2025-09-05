@@ -35,30 +35,32 @@ func GetRightSizingConfigData(cm *corev1.ConfigMap) (rsutility.RSNamespaceConfig
 	return rsutility.GetRSConfigData(cm)
 }
 
-// Gets the namesapce rightsizing predicate function
-func GetNamespaceRSConfigMapPredicateFunc(ctx context.Context, c client.Client) predicate.Funcs {
-	return rsutility.GetRSConfigMapPredicateFunc(ctx, c, ConfigMapName, ApplyRSNamespaceConfigMapChanges)
+// Gets the namespace rightsizing predicate function
+func GetNamespaceRSConfigMapPredicateFunc(ctx context.Context, nm *NamespaceManager) predicate.Funcs {
+	return rsutility.GetRSConfigMapPredicateFunc(ctx, nm.Client, ConfigMapName, func(ctx context.Context, client client.Client, configData rsutility.RSNamespaceConfigMapData) error {
+		// Use the provided manager instance - no new instance creation!
+		return nm.ApplyRSNamespaceConfigMapChanges(ctx, configData)
+	})
 }
 
-// ApplyRSNamespaceConfigMapChanges updates PrometheusRule, Policy, Placement based on configmap changes
-func ApplyRSNamespaceConfigMapChanges(ctx context.Context, c client.Client, configData rsutility.RSNamespaceConfigMapData) error {
-
+// ApplyRSNamespaceConfigMapChanges applies configuration changes using NamespaceManager
+func (nm *NamespaceManager) ApplyRSNamespaceConfigMapChanges(ctx context.Context, configData rsutility.RSNamespaceConfigMapData) error {
 	prometheusRule, err := GeneratePrometheusRule(configData)
 	if err != nil {
 		return err
 	}
 
-	err = CreateOrUpdatePrometheusRulePolicy(ctx, c, prometheusRule)
+	err = nm.CreateOrUpdatePrometheusRulePolicy(ctx, prometheusRule)
 	if err != nil {
 		return err
 	}
 
-	err = CreateUpdatePlacement(ctx, c, configData.PlacementConfiguration)
+	err = nm.CreateUpdatePlacement(ctx, configData.PlacementConfiguration)
 	if err != nil {
 		return err
 	}
 
-	err = CreatePlacementBinding(ctx, c)
+	err = nm.CreatePlacementBinding(ctx)
 	if err != nil {
 		return err
 	}

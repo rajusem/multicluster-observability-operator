@@ -9,10 +9,9 @@ import (
 
 	rsutility "github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/controllers/multiclusterobservability/analytics/rs-utility"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // CreateUpdatePlacement creates the Placement resource
-func CreateUpdatePlacement(ctx context.Context, c client.Client, placementConfig clusterv1beta1.Placement) error {
-	return rsutility.CreateUpdateRSPlacement(ctx, c, PlacementName, ComponentState.Namespace, placementConfig)
+func (nm *NamespaceManager) CreateUpdatePlacement(ctx context.Context, placementConfig clusterv1beta1.Placement) error {
+	return rsutility.CreateUpdateRSPlacement(ctx, nm.Client, PlacementName, nm.State.Namespace, placementConfig)
 }
