@@ -21,6 +21,8 @@ import (
 
 	operatorconfig "github.com/stolostron/multicluster-observability-operator/operators/pkg/config"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
+	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 
 	"github.com/go-logr/logr"
 	routev1 "github.com/openshift/api/route/v1"
@@ -340,6 +342,13 @@ func (r *MultiClusterObservabilityReconciler) Reconcile(ctx context.Context, req
 	}
 
 	if !rendering.MCOAEnabled(instance) {
+		// Clean up right-sizing resources BEFORE undeploying MCOA resources
+		// This ensures cleanup happens while the addon still has credentials
+		if err := r.cleanupRightSizingResources(ctx); err != nil {
+			reqLogger.Error(err, "Failed to cleanup right-sizing resources")
+			// Continue with MCOA undeploy even if cleanup fails
+		}
+
 		namespace, labels := renderer.NamespaceAndLabels()
 		toDelete, err := renderer.MCOAResources(namespace, labels)
 		if err != nil {
@@ -1068,4 +1077,59 @@ func newMCOACRDEventHandler(c client.Client) handler.EventHandler {
 			return reqs
 		},
 	)
+}
+
+// cleanupRightSizingResources cleans up right-sizing resources when MCOA is disabled
+func (r *MultiClusterObservabilityReconciler) cleanupRightSizingResources(ctx context.Context) error {
+	const (
+		configNamespace  = "open-cluster-management-observability"
+		bindingNamespace = "open-cluster-management-global-set"
+	)
+
+	// Namespace right-sizing resources
+	namespaceResources := []struct {
+		name      string
+		namespace string
+		obj       client.Object
+	}{
+		{"rs-namespace-config", configNamespace, &corev1.ConfigMap{}},
+		{"rs-prom-rules-policy", bindingNamespace, &policyv1.Policy{}},
+		{"rs-placement", bindingNamespace, &clusterv1beta1.Placement{}},
+		{"rs-policyset-binding", bindingNamespace, &policyv1.PlacementBinding{}},
+	}
+
+	// Virtualization right-sizing resources
+	virtResources := []struct {
+		name      string
+		namespace string
+		obj       client.Object
+	}{
+		{"rs-virt-config", configNamespace, &corev1.ConfigMap{}},
+		{"rs-virt-prom-rules-policy", bindingNamespace, &policyv1.Policy{}},
+		{"rs-virt-placement", bindingNamespace, &clusterv1beta1.Placement{}},
+		{"rs-virt-policyset-binding", bindingNamespace, &policyv1.PlacementBinding{}},
+	}
+
+	allResources := append(namespaceResources, virtResources...)
+
+	for _, res := range allResources {
+		key := types.NamespacedName{Name: res.name, Namespace: res.namespace}
+		if err := r.Client.Get(ctx, key, res.obj); err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			log.Error(err, "Failed to get right-sizing resource", "name", res.name, "namespace", res.namespace)
+			continue
+		}
+
+		if err := r.Client.Delete(ctx, res.obj); err != nil {
+			if !apierrors.IsNotFound(err) {
+				log.Error(err, "Failed to delete right-sizing resource", "name", res.name, "namespace", res.namespace)
+			}
+		} else {
+			log.Info("Deleted right-sizing resource", "name", res.name, "namespace", res.namespace)
+		}
+	}
+
+	return nil
 }

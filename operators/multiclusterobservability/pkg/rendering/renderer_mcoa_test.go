@@ -311,6 +311,40 @@ func TestMCOAEnabled(t *testing.T) {
 			expected: true,
 		},
 		{
+			name: "Namespace right-sizing enabled",
+			cr: &mcov1beta2.MultiClusterObservability{
+				Spec: mcov1beta2.MultiClusterObservabilitySpec{
+					Capabilities: &mcov1beta2.CapabilitiesSpec{
+						Platform: &mcov1beta2.PlatformCapabilitiesSpec{
+							Analytics: mcov1beta2.PlatformAnalyticsSpec{
+								NamespaceRightSizingRecommendation: mcov1beta2.PlatformRightSizingRecommendationSpec{
+									Enabled: true,
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "Virtualization right-sizing enabled",
+			cr: &mcov1beta2.MultiClusterObservability{
+				Spec: mcov1beta2.MultiClusterObservabilitySpec{
+					Capabilities: &mcov1beta2.CapabilitiesSpec{
+						Platform: &mcov1beta2.PlatformCapabilitiesSpec{
+							Analytics: mcov1beta2.PlatformAnalyticsSpec{
+								VirtualizationRightSizingRecommendation: mcov1beta2.PlatformRightSizingRecommendationSpec{
+									Enabled: true,
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
 			name: "All capabilities disabled",
 			cr: &mcov1beta2.MultiClusterObservability{
 				Spec: mcov1beta2.MultiClusterObservabilitySpec{

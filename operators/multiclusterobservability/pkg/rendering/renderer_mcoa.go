@@ -38,6 +38,12 @@ const (
 	nameMetricsAlertManagerHostname   = "metricsAlertManagerHostname"
 	namePLatformMetricsUI             = "platformMetricsUI"
 
+	// Right-Sizing CustomizedVariable Names
+	namePlatformNamespaceRightSizing             = "platformNamespaceRightSizing"
+	namePlatformNamespaceRightSizingBinding      = "platformNamespaceRightSizingBinding"
+	namePlatformVirtualizationRightSizing        = "platformVirtualizationRightSizing"
+	namePlatformVirtualizationRightSizingBinding = "platformVirtualizationRightSizingBinding"
+
 	grafanaMCOAHomeDashboardID = "89eaec849a6e4837a619fb0540c22b13"
 	grafanaLink                = "/d/" + grafanaMCOAHomeDashboardID + "/acm-clusters-overview"
 )
@@ -237,6 +243,19 @@ func (r *MCORenderer) renderAddonDeploymentConfig(
 				fqdn := mcoconfig.GetMCOASupportedCRDFQDN(mcoconfig.UIPluginsCRDName)
 				appendCustomVar(aodc, namePlatformIncidentDetection, fqdn)
 			}
+			// Right-Sizing options
+			if cs.Platform.Analytics.NamespaceRightSizingRecommendation.Enabled {
+				appendCustomVar(aodc, namePlatformNamespaceRightSizing, "enabled")
+				if cs.Platform.Analytics.NamespaceRightSizingRecommendation.NamespaceBinding != "" {
+					appendCustomVar(aodc, namePlatformNamespaceRightSizingBinding, cs.Platform.Analytics.NamespaceRightSizingRecommendation.NamespaceBinding)
+				}
+			}
+			if cs.Platform.Analytics.VirtualizationRightSizingRecommendation.Enabled {
+				appendCustomVar(aodc, namePlatformVirtualizationRightSizing, "enabled")
+				if cs.Platform.Analytics.VirtualizationRightSizingRecommendation.NamespaceBinding != "" {
+					appendCustomVar(aodc, namePlatformVirtualizationRightSizingBinding, cs.Platform.Analytics.VirtualizationRightSizingRecommendation.NamespaceBinding)
+				}
+			}
 		}
 
 		if cs.UserWorkloads != nil {
@@ -337,7 +356,9 @@ func MCOAEnabled(cr *obv1beta2.MultiClusterObservability) bool {
 		mcoaEnabled = mcoaEnabled ||
 			cr.Spec.Capabilities.Platform.Logs.Collection.Enabled ||
 			cr.Spec.Capabilities.Platform.Metrics.Default.Enabled ||
-			cr.Spec.Capabilities.Platform.Analytics.IncidentDetection.Enabled
+			cr.Spec.Capabilities.Platform.Analytics.IncidentDetection.Enabled ||
+			cr.Spec.Capabilities.Platform.Analytics.NamespaceRightSizingRecommendation.Enabled ||
+			cr.Spec.Capabilities.Platform.Analytics.VirtualizationRightSizingRecommendation.Enabled
 	}
 	if cr.Spec.Capabilities.UserWorkloads != nil {
 		mcoaEnabled = mcoaEnabled || cr.Spec.Capabilities.UserWorkloads.Logs.Collection.ClusterLogForwarder.Enabled

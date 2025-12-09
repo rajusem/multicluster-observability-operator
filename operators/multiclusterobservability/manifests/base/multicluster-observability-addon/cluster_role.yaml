@@ -17,8 +17,16 @@
       resources: ["subjectaccessreviews"]
       verbs: ["get", "create"]
     - apiGroups: ["cluster.open-cluster-management.io"]
-      resources: ["managedclusters", "placements", "placementdecisions"]
+      resources: ["managedclusters", "placementdecisions"]
       verbs: ["get", "list", "watch"]
+    # Placements for right-sizing feature
+    - apiGroups: ["cluster.open-cluster-management.io"]
+      resources: ["placements"]
+      verbs: ["get", "list", "watch", "create", "update", "delete", "patch"]
+    # Policies and PlacementBindings for right-sizing feature
+    - apiGroups: ["policy.open-cluster-management.io"]
+      resources: ["policies", "placementbindings"]
+      verbs: ["get", "list", "watch", "create", "update", "delete", "patch"]
     - apiGroups: ["addon.open-cluster-management.io"]
       resources: ["managedclusteraddons/finalizers"]
       verbs: ["update"]

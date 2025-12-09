@@ -19,12 +19,19 @@ spec:
     spec:
       automountServiceAccountToken: false
       serviceAccountName: multicluster-observability-addon-manager
+      terminationGracePeriodSeconds: 60
       containers:
         - name: manager
           image: quay.io/rhobs/multicluster-observability-addon:v0.0.1
           imagePullPolicy: IfNotPresent
           args:
             - "controller"
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - "/multicluster-observability-addon"
+                  - "cleanup"
           resources:
             limits:
               cpu: 200m
