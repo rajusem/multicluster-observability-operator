@@ -171,10 +171,11 @@ type PlatformIncidentDetectionSpec struct {
 
 type PlatformRightSizingRecommendationSpec struct {
 	// Enabled defines a flag to enable/disable the right-sizing feature for the Analytics.
+	// Default is true (enabled) when not specified.
 	//
 	// +optional
 	// +kubebuilder:validation:Optional
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// NamespaceBinding defines the namespace where all the required resources are created.
 	// The default namespace is `open-cluster-management-global-set

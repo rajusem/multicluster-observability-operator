@@ -48,12 +48,12 @@ func newTestMCOForComponent(componentType ComponentType, binding string, enabled
 	switch componentType {
 	case ComponentTypeNamespace:
 		mco.Spec.Capabilities.Platform.Analytics.NamespaceRightSizingRecommendation = mcov1beta2.PlatformRightSizingRecommendationSpec{
-			Enabled:          enabled,
+			Enabled:          &enabled,
 			NamespaceBinding: binding,
 		}
 	case ComponentTypeVirtualization:
 		mco.Spec.Capabilities.Platform.Analytics.VirtualizationRightSizingRecommendation = mcov1beta2.PlatformRightSizingRecommendationSpec{
-			Enabled:          enabled,
+			Enabled:          &enabled,
 			NamespaceBinding: binding,
 		}
 	}
@@ -98,7 +98,8 @@ func TestGetComponentConfig_PlatformNotConfigured(t *testing.T) {
 
 	enabled, binding, err := GetComponentConfig(mco, ComponentTypeNamespace)
 	require.NoError(t, err)
-	assert.False(t, enabled)
+	// Default to enabled when platform capabilities are not configured
+	assert.True(t, enabled)
 	assert.Empty(t, binding)
 }
 
@@ -108,6 +109,31 @@ func TestGetComponentConfig_UnknownType(t *testing.T) {
 	_, _, err := GetComponentConfig(mco, ComponentType("unknown"))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown component type")
+}
+
+func TestGetComponentConfig_EnabledNotSet_DefaultsToTrue(t *testing.T) {
+	// Create MCO with Platform configured but Enabled not set (nil)
+	mco := &mcov1beta2.MultiClusterObservability{
+		ObjectMeta: metav1.ObjectMeta{Name: "observability"},
+		Spec: mcov1beta2.MultiClusterObservabilitySpec{
+			Capabilities: &mcov1beta2.CapabilitiesSpec{
+				Platform: &mcov1beta2.PlatformCapabilitiesSpec{
+					Analytics: mcov1beta2.PlatformAnalyticsSpec{
+						NamespaceRightSizingRecommendation: mcov1beta2.PlatformRightSizingRecommendationSpec{
+							// Enabled is nil (not set)
+							NamespaceBinding: "custom-namespace",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	enabled, binding, err := GetComponentConfig(mco, ComponentTypeNamespace)
+	require.NoError(t, err)
+	// Default to enabled when Enabled is nil (not explicitly set)
+	assert.True(t, enabled)
+	assert.Equal(t, "custom-namespace", binding)
 }
 
 func TestHandleComponentRightSizing_FeatureDisabled(t *testing.T) {

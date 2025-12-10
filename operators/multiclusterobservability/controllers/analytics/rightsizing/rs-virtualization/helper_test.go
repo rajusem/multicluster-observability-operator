@@ -40,7 +40,7 @@ func newTestMCO(binding string, enabled bool) *mcov1beta2.MultiClusterObservabil
 				Platform: &mcov1beta2.PlatformCapabilitiesSpec{
 					Analytics: mcov1beta2.PlatformAnalyticsSpec{
 						VirtualizationRightSizingRecommendation: mcov1beta2.PlatformRightSizingRecommendationSpec{
-							Enabled:          enabled,
+							Enabled:          &enabled,
 							NamespaceBinding: binding,
 						},
 					},
@@ -159,7 +159,8 @@ func TestGetRightSizingVirtualizationConfig_PlatformNotConfigured(t *testing.T) 
 	}
 
 	enabled, binding := GetRightSizingVirtualizationConfig(mco)
-	assert.False(t, enabled)
+	// Default to enabled when platform capabilities are not configured
+	assert.True(t, enabled)
 	assert.Empty(t, binding)
 }
 
@@ -172,7 +173,8 @@ func TestGetRightSizingVirtualizationConfig_CapabilitiesNil(t *testing.T) {
 	}
 
 	enabled, binding := GetRightSizingVirtualizationConfig(mco)
-	assert.False(t, enabled)
+	// Default to enabled when capabilities are nil
+	assert.True(t, enabled)
 	assert.Empty(t, binding)
 }
 
@@ -187,7 +189,8 @@ func TestGetRightSizingVirtualizationConfig_PlatformNil(t *testing.T) {
 	}
 
 	enabled, binding := GetRightSizingVirtualizationConfig(mco)
-	assert.False(t, enabled)
+	// Default to enabled when platform is nil
+	assert.True(t, enabled)
 	assert.Empty(t, binding)
 }
 

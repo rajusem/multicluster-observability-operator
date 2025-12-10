@@ -45,19 +45,25 @@ type ComponentState struct {
 }
 
 // GetComponentConfig extracts the configuration for a specific component type from MCO
+// Returns true by default for enabled if not explicitly set (nil pointer)
 func GetComponentConfig(mco *mcov1beta2.MultiClusterObservability, componentType ComponentType) (bool, string, error) {
+	// Default to enabled when platform capabilities are not configured
 	if !IsPlatformFeatureConfigured(mco) {
-		return false, "", nil
+		return true, "", nil
 	}
 
 	switch componentType {
 	case ComponentTypeNamespace:
-		enabled := mco.Spec.Capabilities.Platform.Analytics.NamespaceRightSizingRecommendation.Enabled
+		enabledPtr := mco.Spec.Capabilities.Platform.Analytics.NamespaceRightSizingRecommendation.Enabled
 		binding := mco.Spec.Capabilities.Platform.Analytics.NamespaceRightSizingRecommendation.NamespaceBinding
+		// Default to true (enabled) if not explicitly set
+		enabled := enabledPtr == nil || *enabledPtr
 		return enabled, binding, nil
 	case ComponentTypeVirtualization:
-		enabled := mco.Spec.Capabilities.Platform.Analytics.VirtualizationRightSizingRecommendation.Enabled
+		enabledPtr := mco.Spec.Capabilities.Platform.Analytics.VirtualizationRightSizingRecommendation.Enabled
 		binding := mco.Spec.Capabilities.Platform.Analytics.VirtualizationRightSizingRecommendation.NamespaceBinding
+		// Default to true (enabled) if not explicitly set
+		enabled := enabledPtr == nil || *enabledPtr
 		return enabled, binding, nil
 	default:
 		return false, "", fmt.Errorf("unknown component type: %s", componentType)

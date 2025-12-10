@@ -40,7 +40,7 @@ func newTestMCO(binding string, enabled bool) *mcov1beta2.MultiClusterObservabil
 				Platform: &mcov1beta2.PlatformCapabilitiesSpec{
 					Analytics: mcov1beta2.PlatformAnalyticsSpec{
 						NamespaceRightSizingRecommendation: mcov1beta2.PlatformRightSizingRecommendationSpec{
-							Enabled:          enabled,
+							Enabled:          &enabled,
 							NamespaceBinding: binding,
 						},
 					},
@@ -181,7 +181,8 @@ func TestGetRightSizingNamespaceConfig_PlatformNotConfigured(t *testing.T) {
 	}
 
 	enabled, binding := GetRightSizingNamespaceConfig(mco)
-	assert.False(t, enabled)
+	// Default to enabled when platform capabilities are not configured
+	assert.True(t, enabled)
 	assert.Empty(t, binding)
 }
 
@@ -194,7 +195,8 @@ func TestGetRightSizingNamespaceConfig_CapabilitiesNil(t *testing.T) {
 	}
 
 	enabled, binding := GetRightSizingNamespaceConfig(mco)
-	assert.False(t, enabled)
+	// Default to enabled when capabilities are nil
+	assert.True(t, enabled)
 	assert.Empty(t, binding)
 }
 
@@ -209,7 +211,8 @@ func TestGetRightSizingNamespaceConfig_PlatformNil(t *testing.T) {
 	}
 
 	enabled, binding := GetRightSizingNamespaceConfig(mco)
-	assert.False(t, enabled)
+	// Default to enabled when platform is nil
+	assert.True(t, enabled)
 	assert.Empty(t, binding)
 }
 

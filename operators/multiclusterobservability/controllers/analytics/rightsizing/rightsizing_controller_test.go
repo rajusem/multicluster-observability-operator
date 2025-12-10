@@ -38,7 +38,7 @@ func newTestMCO(binding string, enabled bool) *mcov1beta2.MultiClusterObservabil
 				Platform: &mcov1beta2.PlatformCapabilitiesSpec{
 					Analytics: mcov1beta2.PlatformAnalyticsSpec{
 						NamespaceRightSizingRecommendation: mcov1beta2.PlatformRightSizingRecommendationSpec{
-							Enabled:          enabled,
+							Enabled:          &enabled,
 							NamespaceBinding: binding,
 						},
 					},
