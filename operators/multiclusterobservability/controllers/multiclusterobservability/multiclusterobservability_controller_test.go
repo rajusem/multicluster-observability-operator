@@ -48,7 +48,6 @@ import (
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
-	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -352,7 +351,6 @@ func TestMultiClusterMonitoringCRUpdate(t *testing.T) {
 	oauthv1.AddToScheme(s)
 	clusterv1.AddToScheme(s)
 	clusterv1beta1.AddToScheme(s)
-	policyv1.AddToScheme(s)
 	addonv1alpha1.AddToScheme(s)
 	migrationv1alpha1.SchemeBuilder.AddToScheme(s)
 	operatorv1.AddToScheme(s)
@@ -797,7 +795,6 @@ func TestImageReplaceForMCO(t *testing.T) {
 	routev1.AddToScheme(s)
 	oauthv1.AddToScheme(s)
 	clusterv1.AddToScheme(s)
-	policyv1.AddToScheme(s)
 	addonv1alpha1.AddToScheme(s)
 	mchv1.SchemeBuilder.AddToScheme(s)
 	migrationv1alpha1.SchemeBuilder.AddToScheme(s)

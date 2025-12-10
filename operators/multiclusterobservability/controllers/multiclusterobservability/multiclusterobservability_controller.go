@@ -22,7 +22,6 @@ import (
 	operatorconfig "github.com/stolostron/multicluster-observability-operator/operators/pkg/config"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
-	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
 
 	"github.com/go-logr/logr"
 	routev1 "github.com/openshift/api/route/v1"
@@ -1080,34 +1079,39 @@ func newMCOACRDEventHandler(c client.Client) handler.EventHandler {
 }
 
 // cleanupRightSizingResources cleans up right-sizing resources when MCOA is disabled
+// This includes ClusterManagementAddOn, AddOnTemplate, Placement, and ConfigMap resources
 func (r *MultiClusterObservabilityReconciler) cleanupRightSizingResources(ctx context.Context) error {
 	const (
 		configNamespace  = "open-cluster-management-observability"
 		bindingNamespace = "open-cluster-management-global-set"
 	)
 
-	// Namespace right-sizing resources
+	// Namespace right-sizing resources (addon-based approach)
 	namespaceResources := []struct {
 		name      string
 		namespace string
 		obj       client.Object
 	}{
+		// Cluster-scoped resources (namespace is empty)
+		{"observability-rightsizing-namespace", "", &addonv1alpha1.ClusterManagementAddOn{}},
+		{"rs-namespace-template", "", &addonv1alpha1.AddOnTemplate{}},
+		// Namespaced resources
+		{"rs-namespace-placement", bindingNamespace, &clusterv1beta1.Placement{}},
 		{"rs-namespace-config", configNamespace, &corev1.ConfigMap{}},
-		{"rs-prom-rules-policy", bindingNamespace, &policyv1.Policy{}},
-		{"rs-placement", bindingNamespace, &clusterv1beta1.Placement{}},
-		{"rs-policyset-binding", bindingNamespace, &policyv1.PlacementBinding{}},
 	}
 
-	// Virtualization right-sizing resources
+	// Virtualization right-sizing resources (addon-based approach)
 	virtResources := []struct {
 		name      string
 		namespace string
 		obj       client.Object
 	}{
-		{"rs-virt-config", configNamespace, &corev1.ConfigMap{}},
-		{"rs-virt-prom-rules-policy", bindingNamespace, &policyv1.Policy{}},
+		// Cluster-scoped resources (namespace is empty)
+		{"observability-rightsizing-virtualization", "", &addonv1alpha1.ClusterManagementAddOn{}},
+		{"rs-virt-template", "", &addonv1alpha1.AddOnTemplate{}},
+		// Namespaced resources
 		{"rs-virt-placement", bindingNamespace, &clusterv1beta1.Placement{}},
-		{"rs-virt-policyset-binding", bindingNamespace, &policyv1.PlacementBinding{}},
+		{"rs-virt-config", configNamespace, &corev1.ConfigMap{}},
 	}
 
 	allResources := append(namespaceResources, virtResources...)
