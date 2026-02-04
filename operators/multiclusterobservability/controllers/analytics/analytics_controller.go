@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,9 +33,10 @@ var mcoGVK = mcov1beta2.GroupVersion.WithKind("MultiClusterObservability")
 
 // AnalyticsReconciler reconciles a MultiClusterObservability object
 type AnalyticsReconciler struct {
-	Client client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Client   client.Client
+	Log      logr.Logger
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=observability.open-cluster-management.io,resources=multiclusterobservabilities,verbs=get;list;watch;create;update;patch;delete
@@ -85,6 +87,12 @@ func (r *AnalyticsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		rightsizingctrl.CleanupPolicyResourcesForDelegation(ctx, r.Client, instance)
 		// Note: Do NOT sync disabled state to AddOnDeploymentConfig
 		// MCOA will auto-enable when keys are not set
+
+		// Record event for observability
+		if r.Recorder != nil {
+			r.Recorder.Event(instance, corev1.EventTypeNormal, "RightSizingDelegated",
+				"Right-sizing management delegated to MCOA (ClusterManagementAddOn has capability annotation)")
+		}
 		return ctrl.Result{}, nil
 	}
 

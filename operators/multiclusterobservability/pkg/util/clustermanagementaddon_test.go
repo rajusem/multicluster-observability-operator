@@ -137,3 +137,105 @@ func TestClusterManagmentAddon(t *testing.T) {
 		t.Fatalf("Failed to delete clustermanagementaddon: (%v)", err)
 	}
 }
+
+func TestIsMCOARightSizingCapable(t *testing.T) {
+	s := scheme.Scheme
+	addonv1alpha1.AddToScheme(s)
+
+	tests := []struct {
+		name           string
+		cmao           *addonv1alpha1.ClusterManagementAddOn
+		expectedResult bool
+		expectError    bool
+	}{
+		{
+			name:           "MCOA not present",
+			cmao:           nil,
+			expectedResult: false,
+			expectError:    false,
+		},
+		{
+			name: "MCOA present without annotations",
+			cmao: &addonv1alpha1.ClusterManagementAddOn{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: MCOAClusterManagementAddOnName,
+				},
+			},
+			expectedResult: false,
+			expectError:    false,
+		},
+		{
+			name: "MCOA present with other annotations but not capability",
+			cmao: &addonv1alpha1.ClusterManagementAddOn{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: MCOAClusterManagementAddOnName,
+					Annotations: map[string]string{
+						"some-other-annotation": "value",
+					},
+				},
+			},
+			expectedResult: false,
+			expectError:    false,
+		},
+		{
+			name: "MCOA present with capability annotation v1",
+			cmao: &addonv1alpha1.ClusterManagementAddOn{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: MCOAClusterManagementAddOnName,
+					Annotations: map[string]string{
+						RightSizingCapableAnnotation: "v1",
+					},
+				},
+			},
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name: "MCOA present with capability annotation v2",
+			cmao: &addonv1alpha1.ClusterManagementAddOn{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: MCOAClusterManagementAddOnName,
+					Annotations: map[string]string{
+						RightSizingCapableAnnotation: "v2",
+					},
+				},
+			},
+			expectedResult: true,
+			expectError:    false,
+		},
+		{
+			name: "Different addon name with capability annotation",
+			cmao: &addonv1alpha1.ClusterManagementAddOn{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "different-addon",
+					Annotations: map[string]string{
+						RightSizingCapableAnnotation: "v1",
+					},
+				},
+			},
+			expectedResult: false,
+			expectError:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var c = fake.NewClientBuilder().WithScheme(s).Build()
+			if tt.cmao != nil {
+				c = fake.NewClientBuilder().WithScheme(s).WithObjects(tt.cmao).Build()
+			}
+
+			result, err := IsMCOARightSizingCapable(context.Background(), c)
+
+			if tt.expectError && err == nil {
+				t.Errorf("Expected error but got none")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+			if result != tt.expectedResult {
+				t.Errorf("Expected %v but got %v", tt.expectedResult, result)
+			}
+		})
+	}
+}
