@@ -38,6 +38,10 @@ const (
 	nameMetricsAlertManagerHostname   = "metricsAlertManagerHostname"
 	namePLatformMetricsUI             = "platformMetricsUI"
 
+	// Right-sizing AODC CustomizedVariable Names
+	namePlatformNamespaceRightSizing      = "platformNamespaceRightSizing"
+	namePlatformVirtualizationRightSizing = "platformVirtualizationRightSizing"
+
 	grafanaMCOAHomeDashboardID = "89eaec849a6e4837a619fb0540c22b13"
 	grafanaLink                = "/d/" + grafanaMCOAHomeDashboardID + "/acm-clusters-overview"
 )
@@ -247,6 +251,21 @@ func (r *MCORenderer) renderAddonDeploymentConfig(
 			}
 			if cs.Platform.Analytics.IncidentDetection.Enabled {
 				appendCustomVar(aodc, namePlatformIncidentDetection, uipluginsCRDFQDN)
+			}
+
+			// Sync right-sizing state to AODC when platform metrics is enabled
+			// (MCOA handles right-sizing when platform metrics is enabled)
+			if cs.Platform.Metrics.Default.Enabled {
+				if cs.Platform.Analytics.NamespaceRightSizingRecommendation.Enabled {
+					appendCustomVar(aodc, namePlatformNamespaceRightSizing, "enabled")
+				} else {
+					appendCustomVar(aodc, namePlatformNamespaceRightSizing, "disabled")
+				}
+				if cs.Platform.Analytics.VirtualizationRightSizingRecommendation.Enabled {
+					appendCustomVar(aodc, namePlatformVirtualizationRightSizing, "enabled")
+				} else {
+					appendCustomVar(aodc, namePlatformVirtualizationRightSizing, "disabled")
+				}
 			}
 		}
 

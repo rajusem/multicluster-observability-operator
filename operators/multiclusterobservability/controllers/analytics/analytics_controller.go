@@ -75,25 +75,33 @@ func (r *AnalyticsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// ═══════════════════════════════════════════════════════════════════
 	// MIGRATION GATE: Check if MCOA should handle right-sizing
 	// ═══════════════════════════════════════════════════════════════════
-	mcoaCapable, err := util.IsMCOARightSizingCapable(ctx, r.Client)
-	if err != nil {
-		reqLogger.Error(err, "Failed to check MCOA right-sizing capability, proceeding with Policy-based approach")
-		mcoaCapable = false
-	}
 
-	if mcoaCapable {
-		reqLogger.Info("MCOA is right-sizing capable, delegating to MCOA")
-		// Cleanup Policy resources but keep ConfigMaps
-		rightsizingctrl.CleanupPolicyResourcesForDelegation(ctx, r.Client, instance)
-		// Note: Do NOT sync disabled state to AddOnDeploymentConfig
-		// MCOA will auto-enable when keys are not set
-
-		// Record event for observability
-		if r.Recorder != nil {
-			r.Recorder.Event(instance, corev1.EventTypeNormal, "RightSizingDelegated",
-				"Right-sizing management delegated to MCOA (ClusterManagementAddOn has capability annotation)")
+	// Check 1: Is platform metrics enabled? (MCOA prerequisite)
+	// MCOA is only deployed when platform metrics is enabled
+	if isPlatformMetricsEnabled(instance) {
+		// Check 2: Is MCOA capable of handling right-sizing?
+		mcoaCapable, err := util.IsMCOARightSizingCapable(ctx, r.Client)
+		if err != nil {
+			reqLogger.Error(err, "Failed to check MCOA right-sizing capability, proceeding with Policy-based approach")
+			mcoaCapable = false
 		}
-		return ctrl.Result{}, nil
+
+		if mcoaCapable {
+			reqLogger.Info("MCOA is right-sizing capable, delegating to MCOA")
+			// Cleanup Policy resources but keep ConfigMaps
+			rightsizingctrl.CleanupPolicyResourcesForDelegation(ctx, r.Client, instance)
+			// Note: Do NOT sync disabled state to AddOnDeploymentConfig
+			// MCOA will auto-enable when keys are not set
+
+			// Record event for observability
+			if r.Recorder != nil {
+				r.Recorder.Event(instance, corev1.EventTypeNormal, "RightSizingDelegated",
+					"Right-sizing management delegated to MCOA (ClusterManagementAddOn has capability annotation)")
+			}
+			return ctrl.Result{}, nil
+		}
+	} else {
+		reqLogger.V(1).Info("Platform metrics not enabled, MCO will manage right-sizing via Policy")
 	}
 
 	// ═══════════════════════════════════════════════════════════════════
@@ -180,4 +188,17 @@ func (r *AnalyticsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&corev1.ConfigMap{}, &handler.EnqueueRequestForObject{}, builder.WithPredicates(cmNamespaceRSPred)).
 		Watches(&corev1.ConfigMap{}, &handler.EnqueueRequestForObject{}, builder.WithPredicates(cmVirtualizationRSPred)).
 		Complete(r)
+}
+
+// isPlatformMetricsEnabled checks if platform metrics is enabled in the MCO CRD.
+// MCOA is only deployed when platform metrics is enabled, so this is a prerequisite
+// for delegating right-sizing management to MCOA.
+func isPlatformMetricsEnabled(mco *mcov1beta2.MultiClusterObservability) bool {
+	if mco.Spec.Capabilities == nil {
+		return false
+	}
+	if mco.Spec.Capabilities.Platform == nil {
+		return false
+	}
+	return mco.Spec.Capabilities.Platform.Metrics.Default.Enabled
 }

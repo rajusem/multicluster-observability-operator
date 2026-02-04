@@ -183,3 +183,85 @@ func TestAnalyticsReconciler_PausedAnnotation(t *testing.T) {
 	_, err := r.Reconcile(context.TODO(), ctrl.Request{})
 	require.NoError(t, err)
 }
+
+func TestIsPlatformMetricsEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		mco      *mcov1beta2.MultiClusterObservability
+		expected bool
+	}{
+		{
+			name: "nil Capabilities",
+			mco: &mcov1beta2.MultiClusterObservability{
+				ObjectMeta: metav1.ObjectMeta{Name: "observability"},
+				Spec:       mcov1beta2.MultiClusterObservabilitySpec{},
+			},
+			expected: false,
+		},
+		{
+			name: "nil Platform",
+			mco: &mcov1beta2.MultiClusterObservability{
+				ObjectMeta: metav1.ObjectMeta{Name: "observability"},
+				Spec: mcov1beta2.MultiClusterObservabilitySpec{
+					Capabilities: &mcov1beta2.CapabilitiesSpec{},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "Platform metrics disabled (default)",
+			mco: &mcov1beta2.MultiClusterObservability{
+				ObjectMeta: metav1.ObjectMeta{Name: "observability"},
+				Spec: mcov1beta2.MultiClusterObservabilitySpec{
+					Capabilities: &mcov1beta2.CapabilitiesSpec{
+						Platform: &mcov1beta2.PlatformCapabilitiesSpec{},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "Platform metrics explicitly disabled",
+			mco: &mcov1beta2.MultiClusterObservability{
+				ObjectMeta: metav1.ObjectMeta{Name: "observability"},
+				Spec: mcov1beta2.MultiClusterObservabilitySpec{
+					Capabilities: &mcov1beta2.CapabilitiesSpec{
+						Platform: &mcov1beta2.PlatformCapabilitiesSpec{
+							Metrics: mcov1beta2.PlatformMetricsSpec{
+								Default: mcov1beta2.PlatformMetricsDefaultSpec{
+									Enabled: false,
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "Platform metrics enabled",
+			mco: &mcov1beta2.MultiClusterObservability{
+				ObjectMeta: metav1.ObjectMeta{Name: "observability"},
+				Spec: mcov1beta2.MultiClusterObservabilitySpec{
+					Capabilities: &mcov1beta2.CapabilitiesSpec{
+						Platform: &mcov1beta2.PlatformCapabilitiesSpec{
+							Metrics: mcov1beta2.PlatformMetricsSpec{
+								Default: mcov1beta2.PlatformMetricsDefaultSpec{
+									Enabled: true,
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isPlatformMetricsEnabled(tt.mco)
+			require.Equal(t, tt.expected, result)
+		})
+	}
+}
