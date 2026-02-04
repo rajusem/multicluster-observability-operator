@@ -22,6 +22,12 @@ const (
 	AddonGroup                    = "addon.open-cluster-management.io"
 	AddonDeploymentConfigResource = "addondeploymentconfigs"
 	grafanaLink                   = "/d/2b679d600f3b9e7676a7c5ac3643d448/acm-clusters-overview"
+
+	// MCOA ClusterManagementAddOn name
+	MCOAClusterManagementAddOnName = "multicluster-observability-addon"
+
+	// Right-sizing capability annotation - indicates MCOA can handle right-sizing
+	RightSizingCapableAnnotation = "observability.open-cluster-management.io/right-sizing-capable"
 )
 
 type clusterManagementAddOnSpec struct {
@@ -81,6 +87,28 @@ func DeleteClusterManagementAddon(ctx context.Context, client client.Client) err
 
 	log.Info("ClusterManagementAddon deleted", "name", ObservabilityController)
 	return nil
+}
+
+// IsMCOARightSizingCapable checks if the MCOA ClusterManagementAddOn exists and has
+// the right-sizing capability annotation. This is used by MCO to determine whether
+// to delegate right-sizing management to MCOA or continue using Policy-based approach.
+func IsMCOARightSizingCapable(ctx context.Context, c client.Client) (bool, error) {
+	cmao := &addonv1alpha1.ClusterManagementAddOn{}
+	err := c.Get(ctx, types.NamespacedName{Name: MCOAClusterManagementAddOnName}, cmao)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// MCOA ClusterManagementAddOn doesn't exist - not capable
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to get MCOA ClusterManagementAddOn: %w", err)
+	}
+
+	if cmao.Annotations == nil {
+		return false, nil
+	}
+
+	_, exists := cmao.Annotations[RightSizingCapableAnnotation]
+	return exists, nil
 }
 
 func newClusterManagementAddon(c client.Client) (*addonv1alpha1.ClusterManagementAddOn, error) {

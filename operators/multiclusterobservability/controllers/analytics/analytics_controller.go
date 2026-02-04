@@ -14,6 +14,7 @@ import (
 	rightsizingctrl "github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/controllers/analytics/rightsizing"
 	mcoctrl "github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/controllers/multiclusterobservability"
 	"github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/pkg/config"
+	"github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -69,7 +70,28 @@ func (r *AnalyticsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	// create rightsizing component
+	// ═══════════════════════════════════════════════════════════════════
+	// MIGRATION GATE: Check if MCOA should handle right-sizing
+	// ═══════════════════════════════════════════════════════════════════
+	mcoaCapable, err := util.IsMCOARightSizingCapable(ctx, r.Client)
+	if err != nil {
+		reqLogger.Error(err, "Failed to check MCOA right-sizing capability, proceeding with Policy-based approach")
+		mcoaCapable = false
+	}
+
+	if mcoaCapable {
+		reqLogger.Info("MCOA is right-sizing capable, delegating to MCOA")
+		// Cleanup Policy resources but keep ConfigMaps
+		rightsizingctrl.CleanupPolicyResourcesForDelegation(ctx, r.Client, instance)
+		// Note: Do NOT sync disabled state to AddOnDeploymentConfig
+		// MCOA will auto-enable when keys are not set
+		return ctrl.Result{}, nil
+	}
+
+	// ═══════════════════════════════════════════════════════════════════
+	// MCO Mode: Create Policy resources (current GA behavior)
+	// ═══════════════════════════════════════════════════════════════════
+	reqLogger.V(1).Info("MCO managing right-sizing via Policy")
 	err = rightsizingctrl.CreateRightSizingComponent(ctx, r.Client, instance)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create rightsizing component: %w", err)
