@@ -15,7 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 )
 
@@ -121,7 +121,7 @@ func CheckAllOBAsEnabled(opt TestOptions) error {
 
 	for _, cluster := range clusters {
 		// skip the check for local-cluster
-		if cluster.isLocalCluster {
+		if cluster.IsLocalCluster {
 			klog.V(1).Infof("Skip OBA status for managedcluster: %v", cluster.Name)
 			continue
 		}
