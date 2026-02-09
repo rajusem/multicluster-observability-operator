@@ -49,20 +49,20 @@ func GetVirtualizationRSConfigMapPredicateFunc(ctx context.Context, c client.Cli
 	return rsvirtualization.GetVirtualizationRSConfigMapPredicateFunc(ctx, c)
 }
 
-// CleanupPolicyResourcesForDelegation cleans up Policy resources when delegating to MCOA.
-// ConfigMaps are preserved so MCOA can read the configuration.
-// This function uses bindingUpdated=true to keep ConfigMaps while cleaning up Policy/Placement/PlacementBinding.
+// CleanupPolicyResourcesForDelegation cleans up Policy-based right-sizing resources when delegating to MCOA.
+// ConfigMaps are PRESERVED because MCOA owns them in the same namespace (open-cluster-management-observability).
+// Only Policy, Placement, and PlacementBinding resources are cleaned up.
 func CleanupPolicyResourcesForDelegation(
 	ctx context.Context,
 	c client.Client,
 	mco *mcov1beta2.MultiClusterObservability,
 ) {
-	log.Info("rs - cleaning up policy resources for MCOA delegation")
+	log.Info("rs - cleaning up Policy resources for MCOA delegation (preserving ConfigMaps for MCOA)")
 
-	// Use existing cleanup functions with bindingUpdated=true to preserve ConfigMaps
-	// These use ComponentState.Namespace which tracks the current namespace binding
+	// Use bindingUpdated=true to preserve ConfigMaps - MCOA owns them
+	// Only clean up Policy, Placement, PlacementBinding resources
 	rsnamespace.CleanupRSNamespaceResources(ctx, c, rsnamespace.ComponentState.Namespace, true)
 	rsvirtualization.CleanupRSVirtualizationResources(ctx, c, rsvirtualization.ComponentState.Namespace, true)
 
-	log.Info("rs - policy cleanup for MCOA delegation completed")
+	log.Info("rs - Policy cleanup for MCOA delegation completed")
 }
