@@ -191,7 +191,7 @@ func TestIsMCOARightSizingCapable(t *testing.T) {
 			expectError:    false,
 		},
 		{
-			name: "MCOA present with capability annotation v2",
+			name: "MCOA present with capability annotation v2 (unsupported version)",
 			cmao: &addonv1alpha1.ClusterManagementAddOn{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: MCOAClusterManagementAddOnName,
@@ -200,7 +200,7 @@ func TestIsMCOARightSizingCapable(t *testing.T) {
 					},
 				},
 			},
-			expectedResult: true,
+			expectedResult: false, // v2 is not yet supported, should return false
 			expectError:    false,
 		},
 		{

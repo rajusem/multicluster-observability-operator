@@ -20,11 +20,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 var log = logf.Log.WithName("controller_rightsizing")
@@ -44,6 +47,10 @@ type AnalyticsReconciler struct {
 // +kubebuilder:rbac:groups=observability.open-cluster-management.io,resources=multiclusterobservabilities/finalizers,verbs=update
 
 func (r *AnalyticsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// TODO: Future enhancement - Add status subresource to track right-sizing state
+	// This would allow users to see current mode (MCO Policy vs MCOA ManifestWork)
+	// and configuration details via: kubectl get mco -o jsonpath='{.status.rightSizing}'
+
 	reqLogger := log.WithValues("Request.Namespace", req.Namespace, "Request.Name", req.Name)
 	reqLogger.Info("Reconciling RightSizing")
 
@@ -111,6 +118,13 @@ func (r *AnalyticsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	err = rightsizingctrl.CreateRightSizingComponent(ctx, r.Client, instance)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create rightsizing component: %w", err)
+	}
+
+	// When MCO manages right-sizing, sync disabled state to AddOnDeploymentConfig
+	// This tells MCOA to NOT deploy PrometheusRules via ManifestWork
+	if err := r.syncDisabledStateToADC(ctx, reqLogger); err != nil {
+		reqLogger.Error(err, "Failed to sync disabled state to AddOnDeploymentConfig")
+		// Don't fail the reconcile, MCO can still manage via Policy
 	}
 
 	return ctrl.Result{}, nil
@@ -181,13 +195,59 @@ func (r *AnalyticsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	mcoPred := mcoctrl.GetMCOPredicateFunc()
 	cmNamespaceRSPred := rightsizingctrl.GetNamespaceRSConfigMapPredicateFunc(ctx, c)
 	cmVirtualizationRSPred := rightsizingctrl.GetVirtualizationRSConfigMapPredicateFunc(ctx, c)
+	cmaPred := getMCOAClusterManagementAddonPredicateFunc()
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("rightsizing").
 		For(&mcov1beta2.MultiClusterObservability{}, builder.WithPredicates(mcoPred)).
 		Watches(&corev1.ConfigMap{}, &handler.EnqueueRequestForObject{}, builder.WithPredicates(cmNamespaceRSPred)).
 		Watches(&corev1.ConfigMap{}, &handler.EnqueueRequestForObject{}, builder.WithPredicates(cmVirtualizationRSPred)).
+		// Use EnqueueRequestsFromMapFunc for CMA watch since Reconcile lists all MCOs anyway.
+		// The actual request name doesn't matter - we use a consistent trigger name.
+		Watches(&addonv1alpha1.ClusterManagementAddOn{},
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, _ client.Object) []ctrl.Request {
+				// Enqueue a request that will cause MCO List to be called.
+				// The actual request name doesn't matter since Reconcile lists all MCOs.
+				return []ctrl.Request{{
+					NamespacedName: types.NamespacedName{Name: "cma-change-trigger"},
+				}}
+			}),
+			builder.WithPredicates(cmaPred)).
 		Complete(r)
+}
+
+// getMCOAClusterManagementAddonPredicateFunc returns a predicate that filters for MCOA ClusterManagementAddOn changes
+func getMCOAClusterManagementAddonPredicateFunc() predicate.Funcs {
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			return e.Object.GetName() == util.MCOAClusterManagementAddOnName
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if e.ObjectNew.GetName() != util.MCOAClusterManagementAddOnName {
+				return false
+			}
+			// Only trigger if annotations changed (specifically the right-sizing-capable annotation)
+			oldAnnotations := e.ObjectOld.GetAnnotations()
+			newAnnotations := e.ObjectNew.GetAnnotations()
+			oldValue := ""
+			newValue := ""
+			if oldAnnotations != nil {
+				oldValue = oldAnnotations[util.RightSizingCapableAnnotation]
+			}
+			if newAnnotations != nil {
+				newValue = newAnnotations[util.RightSizingCapableAnnotation]
+			}
+			return oldValue != newValue
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			// When MCOA ClusterManagementAddOn is deleted, trigger reconcile.
+			// IsMCOARightSizingCapable() will return false, causing MCO to take over via Policy.
+			return e.Object.GetName() == util.MCOAClusterManagementAddOnName
+		},
+		GenericFunc: func(e event.GenericEvent) bool {
+			return false
+		},
+	}
 }
 
 // isPlatformMetricsEnabled checks if platform metrics is enabled in the MCO CRD.
@@ -201,4 +261,67 @@ func isPlatformMetricsEnabled(mco *mcov1beta2.MultiClusterObservability) bool {
 		return false
 	}
 	return mco.Spec.Capabilities.Platform.Metrics.Default.Enabled
+}
+
+// syncDisabledStateToADC syncs disabled state to AddOnDeploymentConfig when MCO manages right-sizing.
+// This tells MCOA to NOT deploy PrometheusRules via ManifestWork.
+// Uses MCOA's key names: platformNamespaceRightSizing, platformVirtualizationRightSizing with value "disabled"
+func (r *AnalyticsReconciler) syncDisabledStateToADC(ctx context.Context, reqLogger logr.Logger) error {
+	const (
+		keyPlatformNamespaceRightSizing      = "platformNamespaceRightSizing"
+		keyPlatformVirtualizationRightSizing = "platformVirtualizationRightSizing"
+		valueDisabled                        = "disabled"
+	)
+
+	adc := &addonv1alpha1.AddOnDeploymentConfig{}
+	err := r.Client.Get(ctx, types.NamespacedName{
+		Name:      util.MCOAClusterManagementAddOnName,
+		Namespace: config.GetDefaultNamespace(),
+	}, adc)
+	if err != nil {
+		// ADC doesn't exist - nothing to sync
+		return nil
+	}
+
+	// Single-pass: find indices and track if update needed
+	nsIdx, virtIdx := -1, -1
+	needsUpdate := false
+
+	for i, cv := range adc.Spec.CustomizedVariables {
+		switch cv.Name {
+		case keyPlatformNamespaceRightSizing:
+			nsIdx = i
+			if cv.Value != valueDisabled {
+				adc.Spec.CustomizedVariables[i].Value = valueDisabled
+				needsUpdate = true
+			}
+		case keyPlatformVirtualizationRightSizing:
+			virtIdx = i
+			if cv.Value != valueDisabled {
+				adc.Spec.CustomizedVariables[i].Value = valueDisabled
+				needsUpdate = true
+			}
+		}
+	}
+
+	// Append if not found
+	if nsIdx == -1 {
+		adc.Spec.CustomizedVariables = append(adc.Spec.CustomizedVariables,
+			addonv1alpha1.CustomizedVariable{Name: keyPlatformNamespaceRightSizing, Value: valueDisabled})
+		needsUpdate = true
+	}
+	if virtIdx == -1 {
+		adc.Spec.CustomizedVariables = append(adc.Spec.CustomizedVariables,
+			addonv1alpha1.CustomizedVariable{Name: keyPlatformVirtualizationRightSizing, Value: valueDisabled})
+		needsUpdate = true
+	}
+
+	if needsUpdate {
+		reqLogger.V(1).Info("rs - syncing disabled state to AddOnDeploymentConfig (MCO takes over)")
+		if err := r.Client.Update(ctx, adc); err != nil {
+			return fmt.Errorf("failed to update AddOnDeploymentConfig: %w", err)
+		}
+	}
+
+	return nil
 }

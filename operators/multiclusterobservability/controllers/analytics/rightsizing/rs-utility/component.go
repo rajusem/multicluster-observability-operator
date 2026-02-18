@@ -10,6 +10,7 @@ import (
 
 	mcov1beta2 "github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/api/v1beta2"
 	"github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/pkg/config"
+	"github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -73,6 +74,14 @@ func HandleComponentRightSizing(
 	state *ComponentState,
 ) error {
 	log.V(1).Info("rs - handling right-sizing", "component", componentConfig.ComponentType)
+
+	// Check if MCOA is capable of handling right-sizing.
+	// If MCOA is capable, skip ConfigMap and Policy creation - MCOA will handle via ManifestWork.
+	mcoaCapable, err := util.IsMCOARightSizingCapable(ctx, c)
+	if err == nil && mcoaCapable {
+		log.V(1).Info("rs - MCOA is capable, skipping component handling (MCOA will manage)", "component", componentConfig.ComponentType)
+		return nil
+	}
 
 	// Get right-sizing configuration
 	isEnabled, newBinding, err := GetComponentConfig(mco, componentConfig.ComponentType)

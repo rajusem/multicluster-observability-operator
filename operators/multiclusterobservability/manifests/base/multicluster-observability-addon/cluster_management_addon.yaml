@@ -3,10 +3,9 @@ kind: ClusterManagementAddOn
 metadata:
   annotations:
     addon.open-cluster-management.io/lifecycle: addon-manager
-    # NOTE: To enable MCOA-based right-sizing (instead of Policy-based), manually add:
-    #   observability.open-cluster-management.io/right-sizing-capable: "v1"
-    # MCO checks for this annotation to delegate right-sizing management to MCOA.
-    # This annotation will be added by default in a future release after validation.
+    # Indicates MCOA supports right-sizing deployment via ManifestWork.
+    # MCO checks this annotation to delegate right-sizing management to MCOA.
+    observability.open-cluster-management.io/right-sizing-capable: "v1"
   labels:
     app.kubernetes.io/component: multicluster-observability-addon-manager
     app.kubernetes.io/name: multicluster-observability-addon-manager

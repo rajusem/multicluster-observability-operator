@@ -89,9 +89,14 @@ func DeleteClusterManagementAddon(ctx context.Context, client client.Client) err
 	return nil
 }
 
+// SupportedRightSizingVersion is the version of right-sizing capability that MCO supports.
+// Currently only "v1" is supported. This enables forward compatibility checks.
+const SupportedRightSizingVersion = "v1"
+
 // IsMCOARightSizingCapable checks if the MCOA ClusterManagementAddOn exists and has
-// the right-sizing capability annotation. This is used by MCO to determine whether
-// to delegate right-sizing management to MCOA or continue using Policy-based approach.
+// the right-sizing capability annotation with a supported version value.
+// This is used by MCO to determine whether to delegate right-sizing management
+// to MCOA or continue using Policy-based approach.
 func IsMCOARightSizingCapable(ctx context.Context, c client.Client) (bool, error) {
 	cmao := &addonv1alpha1.ClusterManagementAddOn{}
 	err := c.Get(ctx, types.NamespacedName{Name: MCOAClusterManagementAddOnName}, cmao)
@@ -107,8 +112,19 @@ func IsMCOARightSizingCapable(ctx context.Context, c client.Client) (bool, error
 		return false, nil
 	}
 
-	_, exists := cmao.Annotations[RightSizingCapableAnnotation]
-	return exists, nil
+	value, exists := cmao.Annotations[RightSizingCapableAnnotation]
+	if !exists {
+		return false, nil
+	}
+
+	// Version check - only supported version is accepted
+	if value != SupportedRightSizingVersion {
+		log.V(1).Info("Unsupported right-sizing capability version",
+			"version", value, "supported", SupportedRightSizingVersion)
+		return false, nil
+	}
+
+	return true, nil
 }
 
 func newClusterManagementAddon(c client.Client) (*addonv1alpha1.ClusterManagementAddOn, error) {
