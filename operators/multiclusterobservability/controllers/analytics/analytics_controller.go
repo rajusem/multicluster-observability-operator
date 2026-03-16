@@ -243,20 +243,6 @@ func getMCOAClusterManagementAddonPredicateFunc() predicate.Funcs {
 		},
 	}
 }
-
-// isPlatformMetricsEnabled checks if platform metrics is enabled in the MCO CRD.
-// MCOA is only deployed when platform metrics is enabled, so this is a prerequisite
-// for delegating right-sizing management to MCOA.
-func isPlatformMetricsEnabled(mco *mcov1beta2.MultiClusterObservability) bool {
-	if mco.Spec.Capabilities == nil {
-		return false
-	}
-	if mco.Spec.Capabilities.Platform == nil {
-		return false
-	}
-	return mco.Spec.Capabilities.Platform.Metrics.Default.Enabled
-}
-
 // syncDisabledStateToADC syncs disabled state to AddOnDeploymentConfig when MCO manages right-sizing.
 // This tells MCOA to NOT deploy PrometheusRules via ManifestWork.
 // Uses MCOA's key names: platformNamespaceRightSizing, platformVirtualizationRightSizing with value "disabled"
