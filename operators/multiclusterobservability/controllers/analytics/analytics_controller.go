@@ -97,6 +97,13 @@ func (r *AnalyticsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		// Cleanup Policy resources but keep ConfigMaps
 		rightsizingctrl.CleanupPolicyResourcesForDelegation(ctx, r.Client, instance)
 
+		// Sync MCO CR's right-sizing state to ADC so MCOA knows what to deploy.
+		// This is critical when switching from MCO mode (which sets "disabled" in ADC)
+		// to MCOA mode — without this, MCOA would see stale "disabled" values.
+		if err := r.syncRightSizingStateToADC(ctx, instance, true, reqLogger); err != nil {
+			reqLogger.Error(err, "Failed to sync right-sizing state to AddOnDeploymentConfig for MCOA delegation")
+		}
+
 		// Record event for observability
 		if r.Recorder != nil {
 			r.Recorder.Event(instance, corev1.EventTypeNormal, "RightSizingDelegated",
@@ -114,9 +121,9 @@ func (r *AnalyticsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, fmt.Errorf("failed to create rightsizing component: %w", err)
 	}
 
-	// When MCO manages right-sizing, sync disabled state to AddOnDeploymentConfig
+	// When MCO manages right-sizing, sync "disabled" to AddOnDeploymentConfig
 	// This tells MCOA to NOT deploy PrometheusRules via ManifestWork
-	if err := r.syncDisabledStateToADC(ctx, reqLogger); err != nil {
+	if err := r.syncRightSizingStateToADC(ctx, instance, false, reqLogger); err != nil {
 		reqLogger.Error(err, "Failed to sync disabled state to AddOnDeploymentConfig")
 		// Don't fail the reconcile, MCO can still manage via Policy
 	}
@@ -243,15 +250,31 @@ func getMCOAClusterManagementAddonPredicateFunc() predicate.Funcs {
 		},
 	}
 }
-// syncDisabledStateToADC syncs disabled state to AddOnDeploymentConfig when MCO manages right-sizing.
-// This tells MCOA to NOT deploy PrometheusRules via ManifestWork.
-// Uses MCOA's key names: platformNamespaceRightSizing, platformVirtualizationRightSizing with value "disabled"
-func (r *AnalyticsReconciler) syncDisabledStateToADC(ctx context.Context, reqLogger logr.Logger) error {
+// syncRightSizingStateToADC syncs right-sizing state to AddOnDeploymentConfig.
+// When delegatingToMCOA=true: syncs the MCO CR's actual enabled/disabled state so MCOA knows what to deploy.
+// When delegatingToMCOA=false: forces "disabled" so MCOA does NOT deploy PrometheusRules (MCO manages via Policy).
+func (r *AnalyticsReconciler) syncRightSizingStateToADC(ctx context.Context, instance *mcov1beta2.MultiClusterObservability, delegatingToMCOA bool, reqLogger logr.Logger) error {
 	const (
 		keyPlatformNamespaceRightSizing      = "platformNamespaceRightSizing"
 		keyPlatformVirtualizationRightSizing = "platformVirtualizationRightSizing"
+		valueEnabled                         = "enabled"
 		valueDisabled                        = "disabled"
 	)
+
+	// Determine target values based on mode
+	nsValue := valueDisabled
+	virtValue := valueDisabled
+	if delegatingToMCOA {
+		// When delegating to MCOA, sync the MCO CR's actual right-sizing state
+		if instance.Spec.Capabilities != nil && instance.Spec.Capabilities.Platform != nil {
+			if instance.Spec.Capabilities.Platform.Analytics.NamespaceRightSizingRecommendation.Enabled {
+				nsValue = valueEnabled
+			}
+			if instance.Spec.Capabilities.Platform.Analytics.VirtualizationRightSizingRecommendation.Enabled {
+				virtValue = valueEnabled
+			}
+		}
+	}
 
 	adc := &addonv1alpha1.AddOnDeploymentConfig{}
 	err := r.Client.Get(ctx, types.NamespacedName{
@@ -271,14 +294,14 @@ func (r *AnalyticsReconciler) syncDisabledStateToADC(ctx context.Context, reqLog
 		switch cv.Name {
 		case keyPlatformNamespaceRightSizing:
 			nsIdx = i
-			if cv.Value != valueDisabled {
-				adc.Spec.CustomizedVariables[i].Value = valueDisabled
+			if cv.Value != nsValue {
+				adc.Spec.CustomizedVariables[i].Value = nsValue
 				needsUpdate = true
 			}
 		case keyPlatformVirtualizationRightSizing:
 			virtIdx = i
-			if cv.Value != valueDisabled {
-				adc.Spec.CustomizedVariables[i].Value = valueDisabled
+			if cv.Value != virtValue {
+				adc.Spec.CustomizedVariables[i].Value = virtValue
 				needsUpdate = true
 			}
 		}
@@ -287,17 +310,22 @@ func (r *AnalyticsReconciler) syncDisabledStateToADC(ctx context.Context, reqLog
 	// Append if not found
 	if nsIdx == -1 {
 		adc.Spec.CustomizedVariables = append(adc.Spec.CustomizedVariables,
-			addonv1alpha1.CustomizedVariable{Name: keyPlatformNamespaceRightSizing, Value: valueDisabled})
+			addonv1alpha1.CustomizedVariable{Name: keyPlatformNamespaceRightSizing, Value: nsValue})
 		needsUpdate = true
 	}
 	if virtIdx == -1 {
 		adc.Spec.CustomizedVariables = append(adc.Spec.CustomizedVariables,
-			addonv1alpha1.CustomizedVariable{Name: keyPlatformVirtualizationRightSizing, Value: valueDisabled})
+			addonv1alpha1.CustomizedVariable{Name: keyPlatformVirtualizationRightSizing, Value: virtValue})
 		needsUpdate = true
 	}
 
 	if needsUpdate {
-		reqLogger.V(1).Info("rs - syncing disabled state to AddOnDeploymentConfig (MCO takes over)")
+		if delegatingToMCOA {
+			reqLogger.Info("rs - syncing right-sizing state to ADC for MCOA delegation",
+				"namespace", nsValue, "virtualization", virtValue)
+		} else {
+			reqLogger.V(1).Info("rs - syncing disabled state to ADC (MCO takes over)")
+		}
 		if err := r.Client.Update(ctx, adc); err != nil {
 			return fmt.Errorf("failed to update AddOnDeploymentConfig: %w", err)
 		}
