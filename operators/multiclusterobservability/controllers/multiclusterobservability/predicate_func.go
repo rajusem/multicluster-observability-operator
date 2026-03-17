@@ -228,3 +228,28 @@ func GetMCOACRDPredicateFunc() predicate.Funcs {
 		GenericFunc: func(_ event.GenericEvent) bool { return false },
 	}
 }
+
+// GetMCOACMAPredicateFunc returns a predicate that triggers MCO reconciliation
+// when the MCOA ClusterManagementAddOn is created, deleted, or has annotation
+// changes. This enables MCO to deploy/cleanup MCOA resources when right-sizing
+// delegation is activated or deactivated via the CMA annotation.
+func GetMCOACMAPredicateFunc() predicate.Funcs {
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			return e.Object.GetName() == config.MultiClusterObservabilityAddon
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if e.ObjectNew.GetName() != config.MultiClusterObservabilityAddon {
+				return false
+			}
+			// Trigger on annotation changes (specifically the right-sizing-capable annotation)
+			return !reflect.DeepEqual(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations())
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return e.Object.GetName() == config.MultiClusterObservabilityAddon
+		},
+		GenericFunc: func(_ event.GenericEvent) bool {
+			return false
+		},
+	}
+}

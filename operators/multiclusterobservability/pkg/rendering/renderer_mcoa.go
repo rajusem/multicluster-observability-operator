@@ -50,6 +50,7 @@ type MCOARendererOptions struct {
 	DisableCMAORender              bool
 	MetricsHubHostname             string
 	MetricsHubAlertmanagerHostname string
+	RightSizingDelegated           bool
 }
 
 func (r *MCORenderer) newMCOARenderer() {
@@ -253,19 +254,18 @@ func (r *MCORenderer) renderAddonDeploymentConfig(
 				appendCustomVar(aodc, namePlatformIncidentDetection, uipluginsCRDFQDN)
 			}
 
-			// Sync right-sizing state to AODC when platform metrics is enabled
-			// (MCOA handles right-sizing when platform metrics is enabled)
-			if cs.Platform.Metrics.Default.Enabled {
-				if cs.Platform.Analytics.NamespaceRightSizingRecommendation.Enabled {
-					appendCustomVar(aodc, namePlatformNamespaceRightSizing, "enabled")
-				} else {
-					appendCustomVar(aodc, namePlatformNamespaceRightSizing, "disabled")
-				}
-				if cs.Platform.Analytics.VirtualizationRightSizingRecommendation.Enabled {
-					appendCustomVar(aodc, namePlatformVirtualizationRightSizing, "enabled")
-				} else {
-					appendCustomVar(aodc, namePlatformVirtualizationRightSizing, "disabled")
-				}
+			// Right-sizing ADC variables: when MCOA manages RS (delegated),
+			// sync actual CR state. Otherwise set "disabled" so MCOA doesn't deploy RS.
+			delegated := r.rendererOptions != nil && r.rendererOptions.MCOAOptions.RightSizingDelegated
+			if delegated && cs.Platform.Analytics.NamespaceRightSizingRecommendation.Enabled {
+				appendCustomVar(aodc, namePlatformNamespaceRightSizing, "enabled")
+			} else {
+				appendCustomVar(aodc, namePlatformNamespaceRightSizing, "disabled")
+			}
+			if delegated && cs.Platform.Analytics.VirtualizationRightSizingRecommendation.Enabled {
+				appendCustomVar(aodc, namePlatformVirtualizationRightSizing, "enabled")
+			} else {
+				appendCustomVar(aodc, namePlatformVirtualizationRightSizing, "disabled")
 			}
 		}
 
@@ -326,11 +326,10 @@ func (r *MCORenderer) renderMCOATemplates(
 ) ([]*unstructured.Unstructured, error) {
 	uobjs := []*unstructured.Unstructured{}
 	for _, template := range templates {
-		// Skip rendering the ClusterManagementAddOn resource if,
-		// MCOA is enabled && the MCOA redering options disable it.
-		// The goal is for MCO to create this resource but then allow
-		// users to manage it.
-		if MCOAEnabled(r.cr) && template.GetKind() == cmaoKind &&
+		// Skip rendering the ClusterManagementAddOn resource if it already exists.
+		// MCO creates this resource on first deploy, then allows users to manage it
+		// (e.g., adding right-sizing delegation annotation).
+		if template.GetKind() == cmaoKind &&
 			r.rendererOptions != nil && r.rendererOptions.MCOAOptions.DisableCMAORender {
 			continue
 		}
@@ -357,6 +356,9 @@ func (r *MCORenderer) renderMCOATemplates(
 	return uobjs, nil
 }
 
+// MCOAEnabled returns true if any non-right-sizing MCOA capability is enabled.
+// Right-sizing alone does NOT trigger MCOA deployment — it requires the CMA
+// annotation (rightSizingDelegated) to be set for MCOA-based right-sizing.
 func MCOAEnabled(cr *obv1beta2.MultiClusterObservability) bool {
 	if cr.Spec.Capabilities == nil {
 		return false

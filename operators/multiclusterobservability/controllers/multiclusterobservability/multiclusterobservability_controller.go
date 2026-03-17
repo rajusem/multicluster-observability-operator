@@ -251,6 +251,15 @@ func (r *MultiClusterObservabilityReconciler) Reconcile(ctx context.Context, req
 	}
 	disableMCOACMAORender := !apierrors.IsNotFound(err)
 
+	// Check if right-sizing is delegated to MCOA via CMA annotation.
+	// This is true when CMA exists AND has the right-sizing-capable annotation.
+	rightSizingDelegated := false
+	if disableMCOACMAORender && mcoaCMAO.Annotations != nil {
+		if v, ok := mcoaCMAO.Annotations[util.RightSizingCapableAnnotation]; ok && v == util.SupportedRightSizingVersion {
+			rightSizingDelegated = true
+		}
+	}
+
 	obsAPIURL, err := config.GetObsAPIExternalURL(ctx, r.Client, config.GetDefaultNamespace())
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get the Observatorium API URL: %w", err) // Already wrapped
@@ -274,6 +283,7 @@ func (r *MultiClusterObservabilityReconciler) Reconcile(ctx context.Context, req
 			DisableCMAORender:              disableMCOACMAORender,
 			MetricsHubHostname:             obsAPIURL.Host,
 			MetricsHubAlertmanagerHostname: alertmanagerURL.Host,
+			RightSizingDelegated:           rightSizingDelegated,
 		},
 	}
 
@@ -335,7 +345,7 @@ func (r *MultiClusterObservabilityReconciler) Reconcile(ctx context.Context, req
 		}
 	}
 
-	if !rendering.MCOAEnabled(instance) {
+	if !rendering.MCOAEnabled(instance) && !rightSizingDelegated {
 		namespace, labels := renderer.NamespaceAndLabels()
 		toDelete, err := renderer.MCOAResources(namespace, labels)
 		if err != nil {
@@ -509,6 +519,7 @@ func (r *MultiClusterObservabilityReconciler) SetupWithManager(mgr ctrl.Manager)
 	secretPred := GetAlertManagerSecretPredicateFunc()
 	namespacePred := GetNamespacePredicateFunc()
 	mcoaCRDPred := GetMCOACRDPredicateFunc()
+	mcoaCMAPred := GetMCOACMAPredicateFunc()
 
 	ctrBuilder := ctrl.NewControllerManagedBy(mgr).
 		// Watch for changes to primary resource MultiClusterObservability with predicate
@@ -552,7 +563,17 @@ func (r *MultiClusterObservabilityReconciler) SetupWithManager(mgr ctrl.Manager)
 				}
 				return nil
 			}), builder.WithPredicates(predicate.ResourceVersionChangedPredicate{})).
-		Watches(&apiextensionsv1.CustomResourceDefinition{}, newMCOACRDEventHandler(c), builder.WithPredicates(mcoaCRDPred))
+		Watches(&apiextensionsv1.CustomResourceDefinition{}, newMCOACRDEventHandler(c), builder.WithPredicates(mcoaCRDPred)).
+		// Watch MCOA ClusterManagementAddOn for right-sizing delegation changes.
+		// Triggers MCO reconciliation when CMA is created, annotation changes, or deleted,
+		// so MCO can deploy/cleanup MCOA resources for right-sizing delegation.
+		Watches(&addonv1alpha1.ClusterManagementAddOn{},
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, _ client.Object) []reconcile.Request {
+				return []reconcile.Request{{
+					NamespacedName: types.NamespacedName{Name: config.GetMonitoringCRName()},
+				}}
+			}),
+			builder.WithPredicates(mcoaCMAPred))
 
 	if _, err := mgr.GetRESTMapper().KindFor(schema.GroupVersionResource{
 		Group:    "image.openshift.io",
