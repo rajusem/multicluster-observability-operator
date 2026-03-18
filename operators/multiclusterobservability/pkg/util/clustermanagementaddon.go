@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 
+	obv1beta2 "github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/api/v1beta2"
 	"github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/pkg/config"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -93,38 +94,18 @@ func DeleteClusterManagementAddon(ctx context.Context, client client.Client) err
 // Currently only "v1" is supported. This enables forward compatibility checks.
 const SupportedRightSizingVersion = "v1"
 
-// IsMCOARightSizingCapable checks if the MCOA ClusterManagementAddOn exists and has
-// the right-sizing capability annotation with a supported version value.
-// This is used by MCO to determine whether to delegate right-sizing management
-// to MCOA or continue using Policy-based approach.
-func IsMCOARightSizingCapable(ctx context.Context, c client.Client) (bool, error) {
-	cmao := &addonv1alpha1.ClusterManagementAddOn{}
-	err := c.Get(ctx, types.NamespacedName{Name: MCOAClusterManagementAddOnName}, cmao)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// MCOA ClusterManagementAddOn doesn't exist - not capable
-			return false, nil
-		}
-		return false, fmt.Errorf("failed to get MCOA ClusterManagementAddOn: %w", err)
+// IsRightSizingDelegated checks if the MCO CR has the right-sizing delegation
+// annotation with a supported version value. When true, MCOA handles right-sizing
+// via ManifestWork instead of MCO's Policy-based approach.
+func IsRightSizingDelegated(cr *obv1beta2.MultiClusterObservability) bool {
+	if cr.Annotations == nil {
+		return false
 	}
-
-	if cmao.Annotations == nil {
-		return false, nil
-	}
-
-	value, exists := cmao.Annotations[RightSizingCapableAnnotation]
+	value, exists := cr.Annotations[RightSizingCapableAnnotation]
 	if !exists {
-		return false, nil
+		return false
 	}
-
-	// Version check - only supported version is accepted
-	if value != SupportedRightSizingVersion {
-		log.V(1).Info("Unsupported right-sizing capability version",
-			"version", value, "supported", SupportedRightSizingVersion)
-		return false, nil
-	}
-
-	return true, nil
+	return value == SupportedRightSizingVersion
 }
 
 func newClusterManagementAddon(c client.Client) (*addonv1alpha1.ClusterManagementAddOn, error) {

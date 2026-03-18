@@ -75,11 +75,10 @@ func HandleComponentRightSizing(
 ) error {
 	log.V(1).Info("rs - handling right-sizing", "component", componentConfig.ComponentType)
 
-	// Check if MCOA is capable of handling right-sizing.
-	// If MCOA is capable, skip ConfigMap and Policy creation - MCOA will handle via ManifestWork.
-	mcoaCapable, err := util.IsMCOARightSizingCapable(ctx, c)
-	if err == nil && mcoaCapable {
-		log.V(1).Info("rs - MCOA is capable, skipping component handling (MCOA will manage)", "component", componentConfig.ComponentType)
+	// Check if right-sizing is delegated to MCOA via MCO CR annotation.
+	// If delegated, skip ConfigMap and Policy creation - MCOA will handle via ManifestWork.
+	if util.IsRightSizingDelegated(mco) {
+		log.V(1).Info("rs - right-sizing delegated to MCOA, skipping component handling", "component", componentConfig.ComponentType)
 		return nil
 	}
 

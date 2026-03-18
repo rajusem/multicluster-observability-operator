@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	routev1 "github.com/openshift/api/route/v1"
+	obv1beta2 "github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/api/v1beta2"
 	"github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/pkg/config"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -138,103 +139,50 @@ func TestClusterManagmentAddon(t *testing.T) {
 	}
 }
 
-func TestIsMCOARightSizingCapable(t *testing.T) {
-	s := scheme.Scheme
-	addonv1alpha1.AddToScheme(s)
-
+func TestIsRightSizingDelegated(t *testing.T) {
 	tests := []struct {
-		name           string
-		cmao           *addonv1alpha1.ClusterManagementAddOn
-		expectedResult bool
-		expectError    bool
+		name     string
+		cr       *obv1beta2.MultiClusterObservability
+		expected bool
 	}{
 		{
-			name:           "MCOA not present",
-			cmao:           nil,
-			expectedResult: false,
-			expectError:    false,
+			name:     "no annotations",
+			cr:       &obv1beta2.MultiClusterObservability{},
+			expected: false,
 		},
 		{
-			name: "MCOA present without annotations",
-			cmao: &addonv1alpha1.ClusterManagementAddOn{
+			name: "other annotation only",
+			cr: &obv1beta2.MultiClusterObservability{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: MCOAClusterManagementAddOnName,
+					Annotations: map[string]string{"other": "value"},
 				},
 			},
-			expectedResult: false,
-			expectError:    false,
+			expected: false,
 		},
 		{
-			name: "MCOA present with other annotations but not capability",
-			cmao: &addonv1alpha1.ClusterManagementAddOn{
+			name: "annotation v1",
+			cr: &obv1beta2.MultiClusterObservability{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: MCOAClusterManagementAddOnName,
-					Annotations: map[string]string{
-						"some-other-annotation": "value",
-					},
+					Annotations: map[string]string{RightSizingCapableAnnotation: "v1"},
 				},
 			},
-			expectedResult: false,
-			expectError:    false,
+			expected: true,
 		},
 		{
-			name: "MCOA present with capability annotation v1",
-			cmao: &addonv1alpha1.ClusterManagementAddOn{
+			name: "annotation v2 (unsupported)",
+			cr: &obv1beta2.MultiClusterObservability{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: MCOAClusterManagementAddOnName,
-					Annotations: map[string]string{
-						RightSizingCapableAnnotation: "v1",
-					},
+					Annotations: map[string]string{RightSizingCapableAnnotation: "v2"},
 				},
 			},
-			expectedResult: true,
-			expectError:    false,
-		},
-		{
-			name: "MCOA present with capability annotation v2 (unsupported version)",
-			cmao: &addonv1alpha1.ClusterManagementAddOn{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: MCOAClusterManagementAddOnName,
-					Annotations: map[string]string{
-						RightSizingCapableAnnotation: "v2",
-					},
-				},
-			},
-			expectedResult: false, // v2 is not yet supported, should return false
-			expectError:    false,
-		},
-		{
-			name: "Different addon name with capability annotation",
-			cmao: &addonv1alpha1.ClusterManagementAddOn{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "different-addon",
-					Annotations: map[string]string{
-						RightSizingCapableAnnotation: "v1",
-					},
-				},
-			},
-			expectedResult: false,
-			expectError:    false,
+			expected: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var c = fake.NewClientBuilder().WithScheme(s).Build()
-			if tt.cmao != nil {
-				c = fake.NewClientBuilder().WithScheme(s).WithObjects(tt.cmao).Build()
-			}
-
-			result, err := IsMCOARightSizingCapable(context.Background(), c)
-
-			if tt.expectError && err == nil {
-				t.Errorf("Expected error but got none")
-			}
-			if !tt.expectError && err != nil {
-				t.Errorf("Unexpected error: %v", err)
-			}
-			if result != tt.expectedResult {
-				t.Errorf("Expected %v but got %v", tt.expectedResult, result)
+			if got := IsRightSizingDelegated(tt.cr); got != tt.expected {
+				t.Errorf("got %v, want %v", got, tt.expected)
 			}
 		})
 	}

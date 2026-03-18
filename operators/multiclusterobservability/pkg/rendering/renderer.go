@@ -19,7 +19,6 @@ import (
 	"k8s.io/client-go/discovery"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/kustomize/api/resource"
 )
 
 var log = logf.Log.WithName("renderer")
@@ -120,19 +119,11 @@ func (r *MCORenderer) Render() ([]*unstructured.Unstructured, error) {
 	// load and render multicluster-observability-addon templates
 	rightSizingDelegated := r.rendererOptions != nil && r.rendererOptions.MCOAOptions.RightSizingDelegated
 	if MCOAEnabled(r.cr) || rightSizingDelegated {
-		// Full MCOA stack (Deployment, SA, RBAC, ADC + CMA on first deploy)
 		mcoaResources, err := r.MCOAResources(namespace, labels)
 		if err != nil {
 			return nil, err
 		}
 		resources = append(resources, mcoaResources...)
-	} else if RightSizingEnabled(r.cr) {
-		// CMA only — gives user a resource to annotate for MCOA delegation
-		cmaResources, err := r.CMAOnlyResource(namespace, labels)
-		if err != nil {
-			return nil, err
-		}
-		resources = append(resources, cmaResources...)
 	}
 
 	for idx := range resources {
@@ -199,23 +190,6 @@ func (r *MCORenderer) MCOAResources(namespace string, labels map[string]string) 
 	}
 
 	return mcoaResources, nil
-}
-
-// CMAOnlyResource renders only the ClusterManagementAddOn template.
-// Used when right-sizing is enabled but MCOA is not otherwise needed,
-// giving the user a CMA resource to annotate for delegation.
-func (r *MCORenderer) CMAOnlyResource(namespace string, labels map[string]string) ([]*unstructured.Unstructured, error) {
-	mcoaTemplates, err := templates.GetOrLoadMCOATemplates(templatesutil.GetTemplateRenderer())
-	if err != nil {
-		return nil, err
-	}
-	var cmaTemplates []*resource.Resource
-	for _, t := range mcoaTemplates {
-		if t.GetKind() == "ClusterManagementAddOn" {
-			cmaTemplates = append(cmaTemplates, t)
-		}
-	}
-	return r.renderMCOATemplates(cmaTemplates, namespace, labels)
 }
 
 func (r *MCORenderer) HasImagestream() bool {

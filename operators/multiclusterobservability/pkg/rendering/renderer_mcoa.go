@@ -379,15 +379,6 @@ func MCOAEnabled(cr *obv1beta2.MultiClusterObservability) bool {
 	return mcoaEnabled
 }
 
-// RightSizingEnabled returns true if any right-sizing capability is enabled in the MCO CR.
-func RightSizingEnabled(cr *obv1beta2.MultiClusterObservability) bool {
-	if cr.Spec.Capabilities == nil || cr.Spec.Capabilities.Platform == nil {
-		return false
-	}
-	return cr.Spec.Capabilities.Platform.Analytics.NamespaceRightSizingRecommendation.Enabled ||
-		cr.Spec.Capabilities.Platform.Analytics.VirtualizationRightSizingRecommendation.Enabled
-}
-
 func MCOAPlatformMetricsEnabled(cr *obv1beta2.MultiClusterObservability) bool {
 	if cr.Spec.Capabilities == nil {
 		return false

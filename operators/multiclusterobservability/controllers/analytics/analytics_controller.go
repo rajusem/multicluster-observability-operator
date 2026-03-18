@@ -24,10 +24,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 var log = logf.Log.WithName("controller_rightsizing")
@@ -83,17 +81,13 @@ func (r *AnalyticsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// MIGRATION GATE: Check if MCOA should handle right-sizing
 	// ═══════════════════════════════════════════════════════════════════
 
-	// Check if MCOA is capable of handling right-sizing via the CMA annotation.
+	// Check if right-sizing is delegated to MCOA via MCO CR annotation.
 	// The annotation is the authoritative signal — if present, MCOA manages right-sizing
-	// regardless of platform metrics state.
-	mcoaCapable, err := util.IsMCOARightSizingCapable(ctx, r.Client)
-	if err != nil {
-		reqLogger.Error(err, "Failed to check MCOA right-sizing capability, proceeding with Policy-based approach")
-		mcoaCapable = false
-	}
+	// via ManifestWork instead of MCO's Policy-based approach.
+	mcoaCapable := util.IsRightSizingDelegated(instance)
 
 	if mcoaCapable {
-		reqLogger.Info("MCOA is right-sizing capable, delegating to MCOA")
+		reqLogger.Info("Right-sizing delegated to MCOA via MCO CR annotation")
 		// Cleanup Policy resources but keep ConfigMaps
 		rightsizingctrl.CleanupPolicyResourcesForDelegation(ctx, r.Client, instance)
 
@@ -107,7 +101,7 @@ func (r *AnalyticsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		// Record event for observability
 		if r.Recorder != nil {
 			r.Recorder.Event(instance, corev1.EventTypeNormal, "RightSizingDelegated",
-				"Right-sizing management delegated to MCOA (ClusterManagementAddOn has capability annotation)")
+				"Right-sizing management delegated to MCOA (MCO CR has delegation annotation)")
 		}
 		return ctrl.Result{}, nil
 	}
@@ -196,60 +190,14 @@ func (r *AnalyticsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	mcoPred := mcoctrl.GetMCOPredicateFunc()
 	cmNamespaceRSPred := rightsizingctrl.GetNamespaceRSConfigMapPredicateFunc(ctx, c)
 	cmVirtualizationRSPred := rightsizingctrl.GetVirtualizationRSConfigMapPredicateFunc(ctx, c)
-	cmaPred := getMCOAClusterManagementAddonPredicateFunc()
-
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("rightsizing").
 		For(&mcov1beta2.MultiClusterObservability{}, builder.WithPredicates(mcoPred)).
 		Watches(&corev1.ConfigMap{}, &handler.EnqueueRequestForObject{}, builder.WithPredicates(cmNamespaceRSPred)).
 		Watches(&corev1.ConfigMap{}, &handler.EnqueueRequestForObject{}, builder.WithPredicates(cmVirtualizationRSPred)).
-		// Use EnqueueRequestsFromMapFunc for CMA watch since Reconcile lists all MCOs anyway.
-		// The actual request name doesn't matter - we use a consistent trigger name.
-		Watches(&addonv1alpha1.ClusterManagementAddOn{},
-			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, _ client.Object) []ctrl.Request {
-				// Enqueue a request that will cause MCO List to be called.
-				// The actual request name doesn't matter since Reconcile lists all MCOs.
-				return []ctrl.Request{{
-					NamespacedName: types.NamespacedName{Name: "cma-change-trigger"},
-				}}
-			}),
-			builder.WithPredicates(cmaPred)).
 		Complete(r)
 }
 
-// getMCOAClusterManagementAddonPredicateFunc returns a predicate that filters for MCOA ClusterManagementAddOn changes
-func getMCOAClusterManagementAddonPredicateFunc() predicate.Funcs {
-	return predicate.Funcs{
-		CreateFunc: func(e event.CreateEvent) bool {
-			return e.Object.GetName() == util.MCOAClusterManagementAddOnName
-		},
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			if e.ObjectNew.GetName() != util.MCOAClusterManagementAddOnName {
-				return false
-			}
-			// Only trigger if annotations changed (specifically the right-sizing-capable annotation)
-			oldAnnotations := e.ObjectOld.GetAnnotations()
-			newAnnotations := e.ObjectNew.GetAnnotations()
-			oldValue := ""
-			newValue := ""
-			if oldAnnotations != nil {
-				oldValue = oldAnnotations[util.RightSizingCapableAnnotation]
-			}
-			if newAnnotations != nil {
-				newValue = newAnnotations[util.RightSizingCapableAnnotation]
-			}
-			return oldValue != newValue
-		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
-			// When MCOA ClusterManagementAddOn is deleted, trigger reconcile.
-			// IsMCOARightSizingCapable() will return false, causing MCO to take over via Policy.
-			return e.Object.GetName() == util.MCOAClusterManagementAddOnName
-		},
-		GenericFunc: func(e event.GenericEvent) bool {
-			return false
-		},
-	}
-}
 // syncRightSizingStateToADC syncs right-sizing state to AddOnDeploymentConfig.
 // When delegatingToMCOA=true: syncs the MCO CR's actual enabled/disabled state so MCOA knows what to deploy.
 // When delegatingToMCOA=false: forces "disabled" so MCOA does NOT deploy PrometheusRules (MCO manages via Policy).

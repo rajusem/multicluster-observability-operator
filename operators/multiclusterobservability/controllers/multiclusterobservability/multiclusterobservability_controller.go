@@ -251,14 +251,8 @@ func (r *MultiClusterObservabilityReconciler) Reconcile(ctx context.Context, req
 	}
 	disableMCOACMAORender := !apierrors.IsNotFound(err)
 
-	// Check if right-sizing is delegated to MCOA via CMA annotation.
-	// This is true when CMA exists AND has the right-sizing-capable annotation.
-	rightSizingDelegated := false
-	if disableMCOACMAORender && mcoaCMAO.Annotations != nil {
-		if v, ok := mcoaCMAO.Annotations[util.RightSizingCapableAnnotation]; ok && v == util.SupportedRightSizingVersion {
-			rightSizingDelegated = true
-		}
-	}
+	// Check if right-sizing is delegated to MCOA via MCO CR annotation.
+	rightSizingDelegated := util.IsRightSizingDelegated(instance)
 
 	obsAPIURL, err := config.GetObsAPIExternalURL(ctx, r.Client, config.GetDefaultNamespace())
 	if err != nil {
@@ -351,16 +345,22 @@ func (r *MultiClusterObservabilityReconciler) Reconcile(ctx context.Context, req
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to list MCOA resources for deletion in namespace %s: %w", namespace, err)
 		}
-		rightSizingEnabled := rendering.RightSizingEnabled(instance)
 		for _, res := range toDelete {
-			// Don't delete CMA when right-sizing is enabled — it was just
-			// created (or needs to persist) for annotation-based delegation.
-			if res.GetKind() == "ClusterManagementAddOn" && rightSizingEnabled {
-				continue
-			}
 			resNS := res.GetNamespace()
 			if err := deployer.Undeploy(ctx, res, instance); err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to undeploy %s %s/%s: %w", res.GetKind(), resNS, res.GetName(), err)
+			}
+		}
+
+		// Explicitly delete the CMA so the addon framework cleans up ManagedClusterAddons
+		// and ManifestWorks on spokes. MCOAResources() skips CMA when DisableCMAORender
+		// is set (to preserve user annotations during normal operation), but during cleanup
+		// we must remove it to trigger the full addon lifecycle teardown.
+		cma := &addonv1alpha1.ClusterManagementAddOn{}
+		if err := r.Client.Get(ctx, types.NamespacedName{Name: config.MultiClusterObservabilityAddon}, cma); err == nil {
+			reqLogger.Info("Deleting ClusterManagementAddOn for MCOA cleanup", "name", config.MultiClusterObservabilityAddon)
+			if err := r.Client.Delete(ctx, cma); err != nil && !apierrors.IsNotFound(err) {
+				return ctrl.Result{}, fmt.Errorf("failed to delete ClusterManagementAddOn %s: %w", config.MultiClusterObservabilityAddon, err)
 			}
 		}
 	}
@@ -525,8 +525,6 @@ func (r *MultiClusterObservabilityReconciler) SetupWithManager(mgr ctrl.Manager)
 	secretPred := GetAlertManagerSecretPredicateFunc()
 	namespacePred := GetNamespacePredicateFunc()
 	mcoaCRDPred := GetMCOACRDPredicateFunc()
-	mcoaCMAPred := GetMCOACMAPredicateFunc()
-
 	ctrBuilder := ctrl.NewControllerManagedBy(mgr).
 		// Watch for changes to primary resource MultiClusterObservability with predicate
 		For(&mcov1beta2.MultiClusterObservability{}, builder.WithPredicates(mcoPred)).
@@ -569,17 +567,7 @@ func (r *MultiClusterObservabilityReconciler) SetupWithManager(mgr ctrl.Manager)
 				}
 				return nil
 			}), builder.WithPredicates(predicate.ResourceVersionChangedPredicate{})).
-		Watches(&apiextensionsv1.CustomResourceDefinition{}, newMCOACRDEventHandler(c), builder.WithPredicates(mcoaCRDPred)).
-		// Watch MCOA ClusterManagementAddOn for right-sizing delegation changes.
-		// Triggers MCO reconciliation when CMA is created, annotation changes, or deleted,
-		// so MCO can deploy/cleanup MCOA resources for right-sizing delegation.
-		Watches(&addonv1alpha1.ClusterManagementAddOn{},
-			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, _ client.Object) []reconcile.Request {
-				return []reconcile.Request{{
-					NamespacedName: types.NamespacedName{Name: config.GetMonitoringCRName()},
-				}}
-			}),
-			builder.WithPredicates(mcoaCMAPred))
+		Watches(&apiextensionsv1.CustomResourceDefinition{}, newMCOACRDEventHandler(c), builder.WithPredicates(mcoaCRDPred))
 
 	if _, err := mgr.GetRESTMapper().KindFor(schema.GroupVersionResource{
 		Group:    "image.openshift.io",
