@@ -351,7 +351,13 @@ func (r *MultiClusterObservabilityReconciler) Reconcile(ctx context.Context, req
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to list MCOA resources for deletion in namespace %s: %w", namespace, err)
 		}
+		rightSizingEnabled := rendering.RightSizingEnabled(instance)
 		for _, res := range toDelete {
+			// Don't delete CMA when right-sizing is enabled — it was just
+			// created (or needs to persist) for annotation-based delegation.
+			if res.GetKind() == "ClusterManagementAddOn" && rightSizingEnabled {
+				continue
+			}
 			resNS := res.GetNamespace()
 			if err := deployer.Undeploy(ctx, res, instance); err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to undeploy %s %s/%s: %w", res.GetKind(), resNS, res.GetName(), err)
