@@ -4,6 +4,8 @@
 
 package config
 
+import "sync/atomic"
+
 const (
 	ClusterNameKey                  = "cluster-name"
 	HubInfoSecretName               = "hub-info-secret"
@@ -79,9 +81,7 @@ var ImageKeyNameMap = map[string]string{
 	PrometheusConfigmapReloaderKey: PrometheusConfigmapReloaderImgName,
 }
 
-var (
-	IsMCOTerminating = false
-)
+var IsMCOTerminating atomic.Bool
 
 const (
 	DefaultClusterType  = ""
