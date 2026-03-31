@@ -478,3 +478,40 @@ func TestRenderMCOATemplates(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderClusterManagementAddOn_NoLaunchLink(t *testing.T) {
+	wd, err := os.Getwd()
+	assert.NoError(t, err)
+	templatesPath := filepath.Join(wd, "..", "..", "manifests")
+	t.Setenv(templatesutil.TemplatesPathEnvVar, templatesPath)
+
+	tmplRenderer := templatesutil.NewTemplateRenderer(templatesPath)
+	mcoaTemplates, err := templates.GetOrLoadMCOATemplates(tmplRenderer)
+	assert.NoError(t, err)
+
+	var cma *kustomizeres.Resource
+	for _, template := range mcoaTemplates {
+		if template.GetKind() == "ClusterManagementAddOn" {
+			cma = template.DeepCopy()
+			break
+		}
+	}
+	assert.NotNil(t, cma, "ClusterManagementAddOn template not found")
+
+	mco := &mcov1beta2.MultiClusterObservability{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "multicluster-observability",
+		},
+	}
+	renderer := &MCORenderer{cr: mco}
+
+	uobj, err := renderer.renderClusterManagementAddOn(cma, "test", map[string]string{"key": "value"})
+	assert.NoError(t, err)
+	assert.NotNil(t, uobj)
+
+	annotations := uobj.GetAnnotations()
+	assert.NotContains(t, annotations, "console.open-cluster-management.io/launch-link-text",
+		"MCOA CMA should NOT have launch-link-text annotation (Grafana link owned by observability-controller CMA)")
+	assert.NotContains(t, annotations, "console.open-cluster-management.io/launch-link",
+		"MCOA CMA should NOT have launch-link annotation")
+}
