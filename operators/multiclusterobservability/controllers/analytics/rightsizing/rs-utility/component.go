@@ -6,13 +6,15 @@ package rsutility
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	mcov1beta2 "github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/api/v1beta2"
 	"github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/pkg/config"
 	"github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/pkg/util"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	policyv1 "open-cluster-management.io/governance-policy-propagator/api/v1"
@@ -97,7 +99,9 @@ func HandleComponentRightSizing(
 	// If disabled then cleanup related resources
 	if !isEnabled {
 		log.V(1).Info("rs - feature not enabled", "component", componentConfig.ComponentType)
-		CleanupComponentResources(ctx, c, componentConfig, state.Namespace, false)
+		if err := CleanupComponentResources(ctx, c, componentConfig, state.Namespace, false); err != nil {
+			return fmt.Errorf("rs - failed to cleanup %s resources: %w", componentConfig.ComponentType, err)
+		}
 		state.Namespace = newBinding
 		state.Enabled = false
 		return nil
@@ -120,7 +124,9 @@ func HandleComponentRightSizing(
 
 	if namespaceBindingUpdated {
 		// Clean up resources except config map to update NamespaceBinding
-		CleanupComponentResources(ctx, c, componentConfig, existingNamespace, true)
+		if err := CleanupComponentResources(ctx, c, componentConfig, existingNamespace, true); err != nil {
+			return fmt.Errorf("rs - failed to cleanup %s resources for binding update: %w", componentConfig.ComponentType, err)
+		}
 
 		// Get configmap
 		cm := &corev1.ConfigMap{}
@@ -144,14 +150,15 @@ func HandleComponentRightSizing(
 	return nil
 }
 
-// CleanupComponentResources cleans up the resources created for any component type
+// CleanupComponentResources cleans up the resources created for any component type.
+// Returns an error if any resource deletion fails (ignoring NotFound and NoMatchError).
 func CleanupComponentResources(
 	ctx context.Context,
 	c client.Client,
 	componentConfig ComponentConfig,
 	namespace string,
 	bindingUpdated bool,
-) {
+) error {
 	log.V(1).Info("rs - cleaning up resources if exist", "component", componentConfig.ComponentType)
 
 	var resourcesToDelete []client.Object
@@ -172,11 +179,18 @@ func CleanupComponentResources(
 	}
 
 	// Delete related resources
+	var errs []error
 	for _, resource := range resourcesToDelete {
 		err := c.Delete(ctx, resource)
-		if err != nil && !errors.IsNotFound(err) {
+		if err != nil && !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
 			log.Error(err, "rs - failed to delete resource", "name", resource.GetName(), "component", componentConfig.ComponentType)
+			errs = append(errs, err)
 		}
 	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
 	log.Info("rs - cleanup success", "component", componentConfig.ComponentType)
+	return nil
 }

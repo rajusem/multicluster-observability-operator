@@ -15,6 +15,7 @@ import (
 	mcoctrl "github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/controllers/multiclusterobservability"
 	"github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/pkg/config"
 	"github.com/stolostron/multicluster-observability-operator/operators/multiclusterobservability/pkg/util"
+	operatorconfig "github.com/stolostron/multicluster-observability-operator/operators/pkg/config"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -50,6 +51,12 @@ func (r *AnalyticsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// and configuration details via: kubectl get mco -o jsonpath='{.status.rightSizing}'
 
 	reqLogger := log.WithValues("Request.Namespace", req.Namespace, "Request.Name", req.Name)
+
+	if operatorconfig.IsMCOTerminating.Load() {
+		reqLogger.Info("MCO is terminating, skip reconcile for rightsizing controller")
+		return ctrl.Result{}, nil
+	}
+
 	reqLogger.Info("Reconciling RightSizing")
 
 	// Fetch the MultiClusterObservability instance
