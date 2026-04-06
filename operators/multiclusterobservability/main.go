@@ -210,12 +210,10 @@ func main() {
 			},
 		}
 	}
-	if mchCrdExists {
-		mchGVK := schema.GroupVersionKind{Group: config.MCHGroup, Version: config.MCHVersion, Kind: config.MCHKind}
-		gvkLabelsMap[mchGVK] = []filteredcache.Selector{
-			{FieldSelector: fmt.Sprintf("metadata.namespace==%s", mcoNamespace)},
-		}
-	}
+	// MCH filtered cache entry removed — the stolostron/controller-filtered-cache fork
+	// requires GVK to be registered in the scheme, and adding multiclusterhub-operator
+	// as a dependency brings incompatible transitive deps. Since there is typically
+	// only one MCH object, unfiltered caching has negligible impact.
 
 	// The following RBAC resources will not be watched by MCO, the selector will not impact the mco behavior, which
 	// means MCO will fetch kube-apiserver for the correspoding resource if the resource can't be found in the cache.
@@ -315,9 +313,10 @@ func main() {
 	}
 
 	if err = (&analytics.AnalyticsReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("Analytics"),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("controllers").WithName("Analytics"),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("analytics-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Analytics")
 		os.Exit(1)
