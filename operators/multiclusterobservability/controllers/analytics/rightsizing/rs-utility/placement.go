@@ -20,7 +20,17 @@ import (
 func GetDefaultRSPlacement() clusterv1beta1.Placement {
 	return clusterv1beta1.Placement{
 		Spec: clusterv1beta1.PlacementSpec{
-			Predicates: []clusterv1beta1.ClusterPredicate{},
+			Predicates: []clusterv1beta1.ClusterPredicate{
+				{
+					RequiredClusterSelector: clusterv1beta1.ClusterSelector{
+						LabelSelector: metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"vendor": "OpenShift",
+							},
+						},
+					},
+				},
+			},
 			Tolerations: []clusterv1beta1.Toleration{
 				{
 					Key:      "cluster.open-cluster-management.io/unreachable",
