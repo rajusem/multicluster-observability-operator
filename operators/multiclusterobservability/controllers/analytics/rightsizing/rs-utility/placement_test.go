@@ -19,7 +19,13 @@ import (
 func TestGetDefaultRSPlacement(t *testing.T) {
 	placement := GetDefaultRSPlacement()
 
-	assert.Empty(t, placement.Spec.Predicates)
+	// Check predicates restrict to OpenShift clusters only
+	assert.Len(t, placement.Spec.Predicates, 1, "should have exactly one predicate for vendor=OpenShift")
+	predicate := placement.Spec.Predicates[0]
+	assert.Equal(t, map[string]string{"vendor": "OpenShift"},
+		predicate.RequiredClusterSelector.LabelSelector.MatchLabels,
+		"predicate should select vendor=OpenShift clusters only")
+
 	assert.Len(t, placement.Spec.Tolerations, 2)
 
 	// Check tolerations
