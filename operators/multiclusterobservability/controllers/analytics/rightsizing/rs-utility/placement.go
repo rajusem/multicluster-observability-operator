@@ -16,11 +16,28 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// GetDefaultRSPlacement creates a default placement configuration for right-sizing
+// GetDefaultRSPlacement creates a default placement configuration for right-sizing.
+// The placement restricts policy deployment to OpenShift clusters only, because the
+// PrometheusRule ConfigurationPolicy targets the openshift-monitoring namespace which
+// only exists on OpenShift clusters (not on AKS, GKE, EKS, or other non-OCP clusters).
 func GetDefaultRSPlacement() clusterv1beta1.Placement {
 	return clusterv1beta1.Placement{
 		Spec: clusterv1beta1.PlacementSpec{
-			Predicates: []clusterv1beta1.ClusterPredicate{},
+			Predicates: []clusterv1beta1.ClusterPredicate{
+				{
+					RequiredClusterSelector: clusterv1beta1.ClusterSelector{
+						LabelSelector: metav1.LabelSelector{
+							MatchExpressions: []metav1.LabelSelectorRequirement{
+								{
+									Key:      "vendor",
+									Operator: metav1.LabelSelectorOpIn,
+									Values:   []string{"OpenShift"},
+								},
+							},
+						},
+					},
+				},
+			},
 			Tolerations: []clusterv1beta1.Toleration{
 				{
 					Key:      "cluster.open-cluster-management.io/unreachable",
